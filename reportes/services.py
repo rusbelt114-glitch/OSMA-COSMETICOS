@@ -9,7 +9,7 @@ from openpyxl.utils import get_column_letter
 from productos.models import Producto
 from inventario.models import EntradaMercancia
 from ventas.models import Venta, DetalleVenta
-from pagos.models import PagoVenta
+from pagos.models import PagoVenta, Gasto
 
 def obtener_resumen_periodo(desde_dt=None, hasta_dt=None):
     """
@@ -74,10 +74,26 @@ def obtener_resumen_periodo(desde_dt=None, hasta_dt=None):
                 'estado': estado,
             })
 
+    # Gastos y retiros del período (Tienda vs Personal)
+    gastos_qs = Gasto.objects.all()
+    if desde_dt:
+        gastos_qs = gastos_qs.filter(fecha__gte=desde_dt)
+    if hasta_dt:
+        gastos_qs = gastos_qs.filter(fecha__lte=hasta_dt)
+
+    total_gastos_tienda = gastos_qs.filter(categoria='TIENDA').aggregate(total=Sum('monto_equivalente_bs'))['total'] or Decimal('0.00')
+    total_gastos_personal = gastos_qs.filter(categoria='PERSONAL').aggregate(total=Sum('monto_equivalente_bs'))['total'] or Decimal('0.00')
+    total_gastos_general = total_gastos_tienda + total_gastos_personal
+    ganancia_neta_real = total_ganancia - total_gastos_tienda - total_gastos_personal
+
     return {
         'total_ingresos': total_ingresos,
         'total_costos': total_costos,
         'total_ganancia': total_ganancia,
+        'total_gastos_tienda': total_gastos_tienda,
+        'total_gastos_personal': total_gastos_personal,
+        'total_gastos_general': total_gastos_general,
+        'ganancia_neta_real': ganancia_neta_real,
         'num_ventas': num_ventas,
         'total_unidades_vendidas': total_unidades_vendidas,
         'productos_vendidos': list(productos_vendidos),
@@ -248,6 +264,43 @@ def generar_excel_completo(desde_dt=None, hasta_dt=None):
             float(p.tasa_aplicada),
             float(p.monto_equivalente_bs),
             p.referencia
+        ])
+
+    # ----------------------------------------------------
+    # Hoja 5: Gastos y Egresos (Tienda vs Personal)
+    # ----------------------------------------------------
+    ws_gas = wb.create_sheet(title="Gastos y Egresos")
+    headers_gas = [
+        "ID", "Fecha", "Categoría", "Descripción", 
+        "Monto Original", "Moneda", "Tasa Aplicada", "Monto Equivalente (Bs)", 
+        "Medio Pago", "Comprobante", "Notas"
+    ]
+    ws_gas.append(headers_gas)
+    for col_num in range(1, len(headers_gas) + 1):
+        cell = ws_gas.cell(row=1, column=col_num)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+
+    gastos_list = Gasto.objects.all().order_by('-fecha')
+    if desde_dt:
+        gastos_list = gastos_list.filter(fecha__gte=desde_dt)
+    if hasta_dt:
+        gastos_list = gastos_list.filter(fecha__lte=hasta_dt)
+
+    for g in gastos_list:
+        ws_gas.append([
+            g.id,
+            timezone.localtime(g.fecha).strftime("%d/%m/%Y %H:%M"),
+            g.get_categoria_display(),
+            g.descripcion,
+            float(g.monto_original),
+            g.moneda,
+            float(g.tasa_aplicada),
+            float(g.monto_equivalente_bs),
+            g.get_metodo_display(),
+            g.comprobante,
+            g.observaciones
         ])
 
     # Autoajuste de anchos de columna en todas las hojas

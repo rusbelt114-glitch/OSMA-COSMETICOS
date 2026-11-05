@@ -204,7 +204,7 @@ def registrar_venta_fifo(items_carrito, lista_pagos, tasa_usd_bcv, tasa_usdt, ob
             moneda = 'USDT'
             tasa = tasa_usdt
             equiv_bs = (monto_ingresado * tasa).quantize(Decimal('0.01'))
-        elif metodo in ('EFECTIVO_BS', 'PAGO_MOVIL'):
+        elif metodo in ('EFECTIVO_BS', 'PAGO_MOVIL', 'PUNTO_VENTA'):
             moneda = 'BS'
             tasa = Decimal('1.0000')
             equiv_bs = monto_ingresado
@@ -240,7 +240,7 @@ def registrar_venta_fifo(items_carrito, lista_pagos, tasa_usd_bcv, tasa_usdt, ob
     # Distribuir el vuelto preferentemente en pagos en efectivo
     if sobrante_por_asignar_bs > Decimal('0.00'):
         # Orden de preferencia para descontar vuelto: EFECTIVO_BS, EFECTIVO_USD, USDT, otros
-        orden_metodos = ['EFECTIVO_BS', 'EFECTIVO_USD', 'USDT', 'PAGO_MOVIL']
+        orden_metodos = ['EFECTIVO_BS', 'EFECTIVO_USD', 'USDT', 'PAGO_MOVIL', 'PUNTO_VENTA']
         pagos_ordenados = sorted(
             pagos_preparados,
             key=lambda x: orden_metodos.index(x['metodo']) if x['metodo'] in orden_metodos else 99

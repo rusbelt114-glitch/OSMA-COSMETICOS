@@ -114,13 +114,14 @@ class OsmaSistemaTestCase(TestCase):
         self.assertEqual(venta.pagos.count(), 2)
 
     def test_generacion_excel_reporte(self):
-        """Verifica que el generador de Excel produzca un archivo válido con 4 hojas."""
+        """Verifica que el generador de Excel produzca un archivo válido con 5 hojas incluyendo Gastos."""
         wb = generar_excel_completo()
-        self.assertEqual(len(wb.sheetnames), 4)
+        self.assertEqual(len(wb.sheetnames), 5)
         self.assertIn("Inventario Actual", wb.sheetnames)
         self.assertIn("Entradas de Mercancía", wb.sheetnames)
         self.assertIn("Ventas y Ganancia", wb.sheetnames)
         self.assertIn("Detalle de Pagos", wb.sheetnames)
+        self.assertIn("Gastos y Egresos", wb.sheetnames)
 
     def test_vistas_requieren_login(self):
         """Verifica que el sistema esté protegido y redirija al login si no hay sesión."""

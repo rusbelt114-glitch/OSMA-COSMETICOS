@@ -66,6 +66,10 @@ def api_reporte_resumen(request):
         'total_ingresos': float(resumen['total_ingresos']),
         'total_costos': float(resumen['total_costos']),
         'total_ganancia': float(resumen['total_ganancia']),
+        'total_gastos_tienda': float(resumen['total_gastos_tienda']),
+        'total_gastos_personal': float(resumen['total_gastos_personal']),
+        'total_gastos_general': float(resumen['total_gastos_general']),
+        'ganancia_neta_real': float(resumen['ganancia_neta_real']),
         'total_unidades_vendidas': resumen['total_unidades_vendidas'],
         'num_ventas': resumen['num_ventas'],
         'productos_vendidos': [{
@@ -171,6 +175,7 @@ def _restaurar_desde_json(archivo):
             'ventas.detalleventa',
             'ventas.desgloseloteventa',
             'pagos.pagoventa',
+            'pagos.gasto',
             'tasas.historialtasa',
         }
 

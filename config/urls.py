@@ -7,6 +7,7 @@ from productos.views import api_productos
 from inventario.views import api_entradas, api_metricas_inventario, api_eliminar_entrada, api_lotes_disponibles
 from ventas.views import api_ventas, api_anular_venta
 from tasas.views import api_tasas, api_actualizar_tasas
+from pagos.views import api_gastos, api_eliminar_gasto
 from reportes.views import (
     api_reporte_resumen, descargar_excel_reporte, descargar_copia_seguridad, 
     api_restaurar_copia
@@ -30,6 +31,8 @@ urlpatterns = [
     path('api/inventario/metricas/', api_metricas_inventario, name='api_metricas_inventario'),
     path('api/ventas/', api_ventas, name='api_ventas'),
     path('api/ventas/<str:codigo>/anular/', api_anular_venta, name='api_anular_venta'),
+    path('api/gastos/', api_gastos, name='api_gastos'),
+    path('api/gastos/<int:gasto_id>/eliminar/', api_eliminar_gasto, name='api_eliminar_gasto'),
     path('api/tasas/', api_tasas, name='api_tasas'),
     path('api/tasas/actualizar/', api_actualizar_tasas, name='api_actualizar_tasas'),
     path('api/reportes/resumen/', api_reporte_resumen, name='api_reporte_resumen'),

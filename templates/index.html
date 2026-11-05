@@ -65,6 +65,7 @@
         <button type="button" role="tab" data-tab="entry" aria-selected="true"><span class="icon">＋</span>Entrada</button>
         <button type="button" role="tab" data-tab="sell" aria-selected="false"><span class="icon">↗</span>Venta</button>
         <button type="button" role="tab" data-tab="stock" aria-selected="false"><span class="icon">▦</span>Inventario</button>
+        <button type="button" role="tab" data-tab="expenses" aria-selected="false"><span class="icon">▼</span>Gastos</button>
         <button type="button" role="tab" data-tab="refill" aria-selected="false"><span class="icon">◌</span>Análisis</button>
     </div>
 
@@ -175,6 +176,7 @@
                 <div class="fields">
                     <label>Efectivo · Bs<input id="pay-bs" inputmode="decimal" value="0" placeholder="0,00"></label>
                     <label>Pago móvil · Bs<input id="pay-mobile" inputmode="decimal" value="0" placeholder="0,00"></label>
+                    <label>Punto · Tarjeta Bs<input id="pay-punto" inputmode="decimal" value="0" placeholder="0,00"></label>
                     <label>Efectivo · USD<input id="pay-usd" inputmode="decimal" value="0" placeholder="0,00"></label>
                     <label>USDT<input id="pay-usdt" inputmode="decimal" value="0" placeholder="0,00"></label>
                     <label>Tasa USD · Bs/USD<input id="rate-usd" inputmode="decimal" value="{{ tasa_usd_bcv|floatformat:2 }}"></label>
@@ -220,7 +222,101 @@
         </div>
     </section>
 
-    <!-- 04 · ANÁLISIS, ALERTAS Y REPORTES -->
+    <!-- 04 · REGISTRO Y CONTROL DE GASTOS -->
+    <section id="expenses" hidden>
+        <div class="title">
+            <div>
+                <div class="eyebrow">04 · egresos y retiros</div>
+                <h2>Control de Gastos</h2>
+            </div>
+            <span class="muted">Salidas de dinero de la tienda o retiros del dueño</span>
+        </div>
+
+        <div class="metrics">
+            <div class="metric">
+                <small>Gastos de la Tienda (Operativo)</small>
+                <strong id="expense-store-total" style="color: #b3382c;">Bs 0,00</strong>
+                <small>Alquiler, bolsas, comida, servicios</small>
+            </div>
+            <div class="metric">
+                <small>Gastos Personales (Retiros Dueño)</small>
+                <strong id="expense-owner-total" style="color: #8c52ff;">Bs 0,00</strong>
+                <small>Salidas y retiros personales</small>
+            </div>
+            <div class="metric">
+                <small>Total Egresos Registrados</small>
+                <strong id="expense-total-metric">Bs 0,00</strong>
+                <small><span id="expense-count">0</span> egresos en total</small>
+            </div>
+        </div>
+
+        <div class="layout" style="margin-top: 20px;">
+            <div class="card">
+                <h3>Registrar nuevo gasto</h3>
+                <label>
+                    ¿En qué se gastó? (Descripción o concepto)
+                    <input id="expense-desc" placeholder="Ej: Bolsas para tienda, Alquiler, Almuerzo personal, etc.">
+                </label>
+                <div class="fields">
+                    <label>
+                        Categoría
+                        <select id="expense-cat">
+                            <option value="TIENDA">Tienda / Operativo (Alquiler, bolsas, luz, servicios)</option>
+                            <option value="PERSONAL">Personal / Retiro del dueño</option>
+                        </select>
+                    </label>
+                    <label>
+                        Moneda del pago
+                        <select id="expense-currency">
+                            <option value="BS">Bolívares (Bs)</option>
+                            <option value="USD">Dólares (USD en efectivo)</option>
+                            <option value="USDT">USDT (Binance)</option>
+                        </select>
+                    </label>
+                </div>
+                <div class="fields">
+                    <label>
+                        Monto gastado
+                        <input id="expense-amount" inputmode="decimal" placeholder="0,00">
+                    </label>
+                    <label>
+                        Medio con que se pagó
+                        <select id="expense-method">
+                            <option value="EFECTIVO_BS">Efectivo en Bs</option>
+                            <option value="PAGO_MOVIL">Pago Móvil en Bs</option>
+                            <option value="PUNTO_VENTA">Punto de Venta / Débito</option>
+                            <option value="EFECTIVO_USD">Efectivo en USD</option>
+                            <option value="USDT">USDT (Binance)</option>
+                        </select>
+                    </label>
+                </div>
+                <div class="fields">
+                    <label>
+                        Nro. Comprobante / Referencia (opcional)
+                        <input id="expense-ref" placeholder="Ej: Factura 0012, Ref 4829">
+                    </label>
+                    <label>
+                        Tasa de cambio (si es divisa)
+                        <input id="expense-rate" inputmode="decimal" value="{{ tasa_usd_bcv|floatformat:2 }}">
+                    </label>
+                </div>
+                <label>
+                    Notas u observaciones (opcional)
+                    <input id="expense-notes" placeholder="Detalle adicional">
+                </label>
+                <button type="button" class="primary" id="btn-save-expense" style="margin-top: 10px; width: 100%;">Registrar gasto / salida</button>
+            </div>
+
+            <div class="card">
+                <h3>Historial de gastos</h3>
+                <div id="expense-list">
+                    <div class="empty">Cargando gastos...</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 05 · ANÁLISIS, ALERTAS Y REPORTES -->
     <section id="refill" hidden>
         <div class="title">
             <div>
@@ -255,17 +351,24 @@
         </div>
         <div class="metrics" style="margin-top:14px">
             <div class="metric">
-                <small>Unidades vendidas</small>
-                <strong id="sold-count">0</strong>
-            </div>
-            <div class="metric">
-                <small>Ventas del período</small>
+                <small>Ventas totales</small>
                 <strong id="sales-value">Bs 0,00</strong>
+                <small><span id="sold-count">0</span> unidades vendidas</small>
             </div>
             <div class="metric">
-                <small>Ganancia bruta</small>
+                <small>Ganancia bruta (FIFO)</small>
                 <strong id="profit-value">Bs 0,00</strong>
-                <small>Ventas menos costo de lo vendido (FIFO)</small>
+                <small>Ventas menos costo de mercancía</small>
+            </div>
+            <div class="metric">
+                <small>Gastos tienda + retiros</small>
+                <strong id="expenses-report-value" style="color: #b3382c;">Bs 0,00</strong>
+                <small>Tienda: <span id="exp-store-sub">Bs 0,00</span> · Personal: <span id="exp-pers-sub">Bs 0,00</span></small>
+            </div>
+            <div class="metric">
+                <small>Ganancia neta real (Bolsillo)</small>
+                <strong id="net-profit-value" style="color: #376d5e;">Bs 0,00</strong>
+                <small>Ganancia bruta menos todos los gastos</small>
             </div>
         </div>
         <div class="layout">

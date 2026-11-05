@@ -73,11 +73,12 @@
             const tab = btn.dataset.tab;
             document.querySelectorAll('.nav button').forEach(b => b.setAttribute('aria-selected', 'false'));
             btn.setAttribute('aria-selected', 'true');
-            ['entry', 'sell', 'stock', 'refill'].forEach(id => {
+            ['entry', 'sell', 'stock', 'expenses', 'refill'].forEach(id => {
                 const el = $(id);
                 if (el) el.hidden = (id !== tab);
             });
             if (tab === 'stock') void loadInventoryMetrics();
+            if (tab === 'expenses') void loadExpenses();
             if (tab === 'refill') void loadReport();
         };
     });
@@ -551,6 +552,7 @@
         const totalSale = cart.reduce((acc, i) => acc + (i.cantidad * i.precio_unitario_bs), 0);
         const payBs = parseMoney($('pay-bs').value);
         const payMobile = parseMoney($('pay-mobile').value);
+        const payPunto = parseMoney($('pay-punto').value);
         const payUsd = parseMoney($('pay-usd').value);
         const payUsdt = parseMoney($('pay-usdt').value);
 
@@ -559,7 +561,7 @@
 
         const equivUsd = payUsd * rateUsd;
         const equivUsdt = payUsdt * rateUsdt;
-        const totalPaid = payBs + payMobile + equivUsd + equivUsdt;
+        const totalPaid = payBs + payMobile + payPunto + equivUsd + equivUsdt;
 
         const diff = totalSale - totalPaid;
         const convEl = $('conversion');
@@ -583,7 +585,7 @@
         convEl.textContent = txt;
     }
 
-    ['pay-bs', 'pay-mobile', 'pay-usd', 'pay-usdt', 'rate-usd', 'rate-usdt'].forEach(id => {
+    ['pay-bs', 'pay-mobile', 'pay-punto', 'pay-usd', 'pay-usdt', 'rate-usd', 'rate-usdt'].forEach(id => {
         $(id).oninput = updatePaymentCalculations;
     });
 
@@ -593,6 +595,7 @@
 
         const payBs = parseMoney($('pay-bs').value);
         const payMobile = parseMoney($('pay-mobile').value);
+        const payPunto = parseMoney($('pay-punto').value);
         const payUsd = parseMoney($('pay-usd').value);
         const payUsdt = parseMoney($('pay-usdt').value);
 
@@ -602,6 +605,7 @@
         const pagosList = [];
         if (payBs > 0) pagosList.push({ metodo: 'EFECTIVO_BS', monto_original: payBs });
         if (payMobile > 0) pagosList.push({ metodo: 'PAGO_MOVIL', monto_original: payMobile });
+        if (payPunto > 0) pagosList.push({ metodo: 'PUNTO_VENTA', monto_original: payPunto });
         if (payUsd > 0) {
             if (rateUsd <= 0) { info('Debes indicar una tasa válida para el pago en USD.', true); return; }
             pagosList.push({ metodo: 'EFECTIVO_USD', monto_original: payUsd });
@@ -611,7 +615,7 @@
             pagosList.push({ metodo: 'USDT', monto_original: payUsdt });
         }
 
-        const totalPaid = payBs + payMobile + (payUsd * rateUsd) + (payUsdt * rateUsdt);
+        const totalPaid = payBs + payMobile + payPunto + (payUsd * rateUsd) + (payUsdt * rateUsdt);
         if (totalPaid < (totalSale - 0.50)) {
             info(`El pago recibido (Bs ${fmt(totalPaid)}) es menor que el total (Bs ${fmt(totalSale)}).`, true);
             return;
@@ -654,7 +658,7 @@
                 cart = [];
                 currentSaleToken = null; // Liberar token tras confirmación exitosa
                 renderCart();
-                ['pay-bs', 'pay-mobile', 'pay-usd', 'pay-usdt'].forEach(id => { $(id).value = '0'; });
+                ['pay-bs', 'pay-mobile', 'pay-punto', 'pay-usd', 'pay-usdt'].forEach(id => { $(id).value = '0'; });
                 updatePaymentCalculations();
                 await loadProducts();
                 await loadLots();
@@ -783,6 +787,10 @@
             $('sold-count').textContent = data.total_unidades_vendidas || 0;
             $('sales-value').textContent = 'Bs ' + fmt(data.total_ingresos);
             $('profit-value').textContent = 'Bs ' + fmt(data.total_ganancia);
+            if ($('expenses-report-value')) $('expenses-report-value').textContent = 'Bs ' + fmt(data.total_gastos_general || 0);
+            if ($('exp-store-sub')) $('exp-store-sub').textContent = 'Bs ' + fmt(data.total_gastos_tienda || 0);
+            if ($('exp-pers-sub')) $('exp-pers-sub').textContent = 'Bs ' + fmt(data.total_gastos_personal || 0);
+            if ($('net-profit-value')) $('net-profit-value').textContent = 'Bs ' + fmt(data.ganancia_neta_real || 0);
 
             $('period-info').textContent = `${data.num_ventas} venta(s) registradas en este período.`;
 
@@ -1009,6 +1017,169 @@
     };
 
     // -------------------------------------------------------------------------
+    // 04 · CONTROL DE GASTOS Y RETIROS (TIENDA VS PERSONAL)
+    // -------------------------------------------------------------------------
+    async function loadExpenses() {
+        const from = $('from-date') ? $('from-date').value : '';
+        const to = $('to-date') ? $('to-date').value : '';
+        let url = '/api/gastos/?';
+        if (from) url += `desde=${encodeURIComponent(from)}&`;
+        if (to) url += `hasta=${encodeURIComponent(to)}`;
+
+        try {
+            const res = await fetch(url);
+            const data = await res.json();
+
+            if ($('expense-store-total')) $('expense-store-total').textContent = 'Bs ' + fmt(data.total_tienda_bs);
+            if ($('expense-owner-total')) $('expense-owner-total').textContent = 'Bs ' + fmt(data.total_personal_bs);
+            if ($('expense-total-metric')) $('expense-total-metric').textContent = 'Bs ' + fmt(data.total_general_bs);
+            if ($('expense-count')) $('expense-count').textContent = data.num_gastos || 0;
+
+            const listEl = $('expense-list');
+            if (!listEl) return;
+
+            if (!data.gastos || !data.gastos.length) {
+                listEl.innerHTML = '<div class="empty">No hay gastos ni retiros registrados en este período.</div>';
+                return;
+            }
+
+            listEl.innerHTML = data.gastos.map(g => {
+                const isPersonal = g.categoria === 'PERSONAL';
+                return `
+                    <div class="row">
+                        <div>
+                            <b>${esc(g.descripcion)}</b>
+                            <span class="pill ${isPersonal ? 'warn' : ''}" style="margin-left: 6px; font-size: .7rem; ${isPersonal ? 'background: #f3e8ff; color: #6b21a8;' : ''}">
+                                ${isPersonal ? 'Personal / Dueño' : 'Tienda / Operativo'}
+                            </span>
+                            <small>${esc(g.fecha)} · Pagado vía ${esc(g.metodo_label)}${g.comprobante ? ` (Ref: ${esc(g.comprobante)})` : ''}</small>
+                            ${g.observaciones ? `<small class="muted">${esc(g.observaciones)}</small>` : ''}
+                        </div>
+                        <div style="text-align: right; display: flex; align-items: center; gap: 10px;">
+                            <div>
+                                <span class="amount" style="color: #b3382c;">Bs ${fmt(g.monto_equivalente_bs)}</span>
+                                ${g.moneda !== 'BS' ? `<small class="muted" style="display:block;">${g.moneda} ${fmt(g.monto_original)}</small>` : ''}
+                            </div>
+                            <button type="button" class="link" data-delete-expense="${g.id}" style="color: #b3382c; font-size: .78rem;" title="Eliminar gasto">
+                                Borrar
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        } catch (e) {
+            console.error('Error cargando gastos:', e);
+        }
+    }
+
+    if ($('expense-currency')) {
+        $('expense-currency').onchange = () => {
+            const curr = $('expense-currency').value;
+            if (curr === 'USD') {
+                $('expense-rate').value = $('rate-usd').value;
+                $('expense-method').value = 'EFECTIVO_USD';
+            } else if (curr === 'USDT') {
+                $('expense-rate').value = $('rate-usdt').value;
+                $('expense-method').value = 'USDT';
+            } else {
+                $('expense-rate').value = '1.00';
+                $('expense-method').value = 'EFECTIVO_BS';
+            }
+        };
+    }
+
+    if ($('btn-save-expense')) {
+        $('btn-save-expense').onclick = async () => {
+            const desc = $('expense-desc').value.trim();
+            const cat = $('expense-cat').value;
+            const currency = $('expense-currency').value;
+            const amount = parseMoney($('expense-amount').value);
+            const method = $('expense-method').value;
+            const ref = $('expense-ref').value.trim();
+            const rate = parseMoney($('expense-rate').value) || 1.0;
+            const notes = $('expense-notes').value.trim();
+
+            if (!desc) {
+                info('Indica la descripción o motivo del gasto.', true);
+                $('expense-desc').focus();
+                return;
+            }
+
+            if (amount <= 0) {
+                info('El monto del gasto debe ser mayor a cero.', true);
+                $('expense-amount').focus();
+                return;
+            }
+
+            $('btn-save-expense').disabled = true;
+            $('btn-save-expense').textContent = 'Guardando egreso...';
+
+            try {
+                const res = await fetch('/api/gastos/', {
+                    method: 'POST',
+                    headers: getHeaders(),
+                    body: JSON.stringify({
+                        descripcion: desc,
+                        categoria: cat,
+                        moneda: currency,
+                        monto: amount,
+                        metodo: method,
+                        tasa: rate,
+                        comprobante: ref,
+                        observaciones: notes
+                    })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    info(data.mensaje);
+                    $('expense-desc').value = '';
+                    $('expense-amount').value = '';
+                    $('expense-ref').value = '';
+                    $('expense-notes').value = '';
+                    await loadExpenses();
+                    await loadReport();
+                } else {
+                    info(data.error || 'Error al guardar el gasto.', true);
+                }
+            } catch (e) {
+                console.error('Error al registrar gasto:', e);
+                info('Error de red al intentar registrar el gasto.', true);
+            } finally {
+                $('btn-save-expense').disabled = false;
+                $('btn-save-expense').textContent = 'Registrar gasto / salida';
+            }
+        };
+    }
+
+    if ($('expense-list')) {
+        $('expense-list').onclick = async e => {
+            const delBtn = e.target.closest('[data-delete-expense]');
+            if (delBtn) {
+                const id = Number(delBtn.dataset.deleteExpense);
+                if (!confirm('¿Estás seguro de eliminar este registro de gasto?')) return;
+
+                try {
+                    const res = await fetch(`/api/gastos/${id}/eliminar/`, {
+                        method: 'POST',
+                        headers: getHeaders()
+                    });
+                    const data = await res.json();
+                    if (res.ok) {
+                        info(data.mensaje);
+                        await loadExpenses();
+                        await loadReport();
+                    } else {
+                        info(data.error || 'No se pudo eliminar el gasto.', true);
+                    }
+                } catch (err) {
+                    console.error('Error al eliminar gasto:', err);
+                    info('Error de red al eliminar el gasto.', true);
+                }
+            }
+        };
+    }
+
+    // -------------------------------------------------------------------------
     // INICIALIZACIÓN ULTRA RÁPIDA EN PARALELO
     // -------------------------------------------------------------------------
     Promise.all([
@@ -1016,7 +1187,8 @@
         loadProducts(),
         loadEntries(),
         loadLots(),
-        loadInventoryMetrics()
+        loadInventoryMetrics(),
+        loadExpenses()
     ]).catch(err => console.error('Error inicializando:', err));
 
 })();
