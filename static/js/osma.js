@@ -1395,7 +1395,6 @@
         loadExpenses()
     ]).catch(err => console.error('Error inicializando:', err));
 
-})
     // -------------------------------------------------------------------------
     // 06 · REINICIO DE DATOS Y LIMPIEZA DE PRUEBAS
     // -------------------------------------------------------------------------
