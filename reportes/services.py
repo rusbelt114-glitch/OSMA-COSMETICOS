@@ -1,7 +1,7 @@
 from decimal import Decimal
 from datetime import datetime, time
 from django.utils import timezone
-from django.db.models import Sum, Count, F
+from django.db.models import Sum, Count, F, Q
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
@@ -13,7 +13,12 @@ from pagos.models import PagoVenta, Gasto
 
 def obtener_resumen_periodo(desde_dt=None, hasta_dt=None):
     """
-    Calcula las métricas financieras y operativas para el rango de fechas especificado.
+    Calcula las métricas financieras y operativas del negocio:
+    - Ganancia bruta = Ventas − Costo de lo vendido (FIFO)
+    - Gastos operativos del negocio (Tienda)
+    - Resultado después de gastos operativos = Ganancia bruta − Gastos operativos
+    - Retiros personales del dueño (informados por separado)
+    - Inversión en existencias y venta potencial del inventario actual
     """
     ventas_qs = Venta.objects.filter(anulada=False)
     if desde_dt:
@@ -49,19 +54,45 @@ def obtener_resumen_periodo(desde_dt=None, hasta_dt=None):
         .order_by('-unidades')
     )
 
-    # Cobros agrupados por medio de pago
+    # Cobros agrupados por medio y moneda (distinguiendo recibido, vuelto y cobro neto)
     pagos_qs = PagoVenta.objects.filter(venta__in=ventas_qs)
     cobros_por_medio = (
         pagos_qs.values('metodo', 'moneda')
         .annotate(
-            total_original=Sum('monto_original'),
-            total_bs=Sum('monto_equivalente_bs'),
+            monto_recibido=Sum(F('monto_recibido')),
+            vuelto_entregado_bs=Sum('vuelto_entregado_bs'),
+            total_neto_orig=Sum('monto_original'),
+            total_neto_bs=Sum('monto_equivalente_bs'),
             cantidad_transacciones=Count('id')
         )
         .order_by('metodo')
     )
 
-    # Inventario actual y alertas
+    # Gastos y retiros del período (Tienda vs Personal)
+    gastos_qs = Gasto.objects.all()
+    if desde_dt:
+        gastos_qs = gastos_qs.filter(fecha__gte=desde_dt)
+    if hasta_dt:
+        gastos_qs = gastos_qs.filter(fecha__lte=hasta_dt)
+
+    total_gastos_tienda = gastos_qs.filter(categoria='TIENDA').aggregate(total=Sum('monto_equivalente_bs'))['total'] or Decimal('0.00')
+    total_gastos_personal = gastos_qs.filter(categoria='PERSONAL').aggregate(total=Sum('monto_equivalente_bs'))['total'] or Decimal('0.00')
+    total_gastos_general = total_gastos_tienda + total_gastos_personal
+
+    # Resultado después de gastos operativos (Ganancia bruta menos gastos de la tienda)
+    resultado_despues_gastos = total_ganancia - total_gastos_tienda
+
+    # Inventario actual (a la fecha y hora de la consulta, independiente del período de ventas)
+    entradas_activas = EntradaMercancia.objects.filter(cantidad_disponible__gt=0, producto__activo=True)
+    inv_agregados = entradas_activas.aggregate(
+        total_uds=Sum('cantidad_disponible'),
+        inversion_costo=Sum(F('cantidad_disponible') * F('costo_unitario')),
+        venta_potencial=Sum(F('cantidad_disponible') * F('precio_venta'))
+    )
+    total_uds_inv = inv_agregados['total_uds'] or 0
+    inversion_existencias = inv_agregados['inversion_costo'] or Decimal('0.00')
+    venta_potencial = inv_agregados['venta_potencial'] or Decimal('0.00')
+
     productos_activos = Producto.objects.filter(activo=True)
     productos_alerta = []
     for prod in productos_activos:
@@ -74,17 +105,7 @@ def obtener_resumen_periodo(desde_dt=None, hasta_dt=None):
                 'estado': estado,
             })
 
-    # Gastos y retiros del período (Tienda vs Personal)
-    gastos_qs = Gasto.objects.all()
-    if desde_dt:
-        gastos_qs = gastos_qs.filter(fecha__gte=desde_dt)
-    if hasta_dt:
-        gastos_qs = gastos_qs.filter(fecha__lte=hasta_dt)
-
-    total_gastos_tienda = gastos_qs.filter(categoria='TIENDA').aggregate(total=Sum('monto_equivalente_bs'))['total'] or Decimal('0.00')
-    total_gastos_personal = gastos_qs.filter(categoria='PERSONAL').aggregate(total=Sum('monto_equivalente_bs'))['total'] or Decimal('0.00')
-    total_gastos_general = total_gastos_tienda + total_gastos_personal
-    ganancia_neta_real = total_ganancia - total_gastos_tienda - total_gastos_personal
+    fecha_consulta_inv = timezone.localtime(timezone.now()).strftime("%d/%m/%Y %I:%M %p")
 
     return {
         'total_ingresos': total_ingresos,
@@ -93,27 +114,35 @@ def obtener_resumen_periodo(desde_dt=None, hasta_dt=None):
         'total_gastos_tienda': total_gastos_tienda,
         'total_gastos_personal': total_gastos_personal,
         'total_gastos_general': total_gastos_general,
-        'ganancia_neta_real': ganancia_neta_real,
+        'resultado_despues_gastos': resultado_despues_gastos,
         'num_ventas': num_ventas,
         'total_unidades_vendidas': total_unidades_vendidas,
         'productos_vendidos': list(productos_vendidos),
         'cobros_por_medio': list(cobros_por_medio),
         'productos_alerta': productos_alerta,
+        'inventario_actual': {
+            'fecha_consulta': fecha_consulta_inv,
+            'total_productos_activos': productos_activos.count(),
+            'unidades_disponibles': total_uds_inv,
+            'inversion_existencias': inversion_existencias,
+            'venta_potencial': venta_potencial,
+            'nota': 'La venta potencial es el valor de las existencias a su precio de venta registrado, no es dinero cobrado ni ganancia realizada. La inversión en existencias representa el costo de la mercancía restante.'
+        },
         'ventas_listado': ventas_qs.prefetch_related('detalles__producto', 'pagos')[:100],
     }
 
 
 def generar_excel_completo(desde_dt=None, hasta_dt=None):
     """
-    Genera un libro Excel con 4 pestañas:
-    1. Inventario actual
-    2. Entradas de mercancía
-    3. Ventas y ganancia bruta
-    4. Pagos por medio
+    Genera un libro Excel profesional con 5 pestañas completas y auditables:
+    1. Inventario actual (inversión en existencias y venta potencial)
+    2. Entradas de mercancía (lotes y trazabilidad histórica)
+    3. Ventas y ganancia bruta (FIFO, fecha/hora 12h Caracas)
+    4. Cobros y pagos (recibido, vuelto y cobro neto)
+    5. Gastos y retiros (Gastos operativos de tienda vs Retiros personales del dueño)
     """
     wb = openpyxl.Workbook()
     
-    # Estilos elegantes basados en la paleta Osma
     header_fill = PatternFill(start_color="222320", end_color="222320", fill_type="solid")
     header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
     accent_fill = PatternFill(start_color="D6EBE5", end_color="D6EBE5", fill_type="solid")
@@ -126,7 +155,7 @@ def generar_excel_completo(desde_dt=None, hasta_dt=None):
     )
 
     # ----------------------------------------------------
-    # Hoja 1: Inventario
+    # Hoja 1: Inventario Actual
     # ----------------------------------------------------
     ws_inv = wb.active
     ws_inv.title = "Inventario Actual"
@@ -134,7 +163,7 @@ def generar_excel_completo(desde_dt=None, hasta_dt=None):
     headers_inv = [
         "ID", "Producto", "Stock Actual", "Mínimo Alerta", 
         "Estado", "Último Costo (Bs)", "Último Precio Venta (Bs)", 
-        "Valor Venta Stock (Bs)"
+        "Inversión en Existencias (Bs)", "Venta Potencial (Bs)"
     ]
     ws_inv.append(headers_inv)
 
@@ -148,9 +177,18 @@ def generar_excel_completo(desde_dt=None, hasta_dt=None):
     for p in productos:
         st = p.stock_total
         estado_label = "Agotado" if st == 0 else ("Bajo mínimo" if st <= p.stock_minimo else "Normal")
-        ultimo_costo = p.ultimo_costo or Decimal('0.00')
+        
+        # Inversión exacta en existencias basada en lotes vigentes
+        inv_costo = EntradaMercancia.objects.filter(producto=p, cantidad_disponible__gt=0).aggregate(
+            tot=Sum(F('cantidad_disponible') * F('costo_unitario'))
+        )['tot'] or Decimal('0.00')
+        
+        inv_venta = EntradaMercancia.objects.filter(producto=p, cantidad_disponible__gt=0).aggregate(
+            tot=Sum(F('cantidad_disponible') * F('precio_venta'))
+        )['tot'] or Decimal('0.00')
+
+        ultimo_costo = p.entradas.order_by('-fecha_entrada', '-id').values_list('costo_unitario', flat=True).first() or Decimal('0.00')
         ultimo_precio = p.ultimo_precio_venta or Decimal('0.00')
-        valor_venta = st * ultimo_precio
 
         row = [
             p.id,
@@ -160,7 +198,8 @@ def generar_excel_completo(desde_dt=None, hasta_dt=None):
             estado_label,
             float(ultimo_costo),
             float(ultimo_precio),
-            float(valor_venta)
+            float(inv_costo),
+            float(inv_venta)
         ]
         ws_inv.append(row)
 
@@ -169,9 +208,9 @@ def generar_excel_completo(desde_dt=None, hasta_dt=None):
     # ----------------------------------------------------
     ws_ent = wb.create_sheet(title="Entradas de Mercancía")
     headers_ent = [
-        "ID", "Fecha", "Producto", "Cant. Recibida", 
+        "ID", "Fecha y Hora (Caracas)", "Producto", "Cant. Recibida", 
         "Cant. Disponible", "Costo Unit. (Bs)", "Precio Venta (Bs)", 
-        "Costo Total (Bs)", "Observaciones"
+        "Inversión Inicial (Bs)", "Observaciones"
     ]
     ws_ent.append(headers_ent)
     for col_num in range(1, len(headers_ent) + 1):
@@ -180,7 +219,7 @@ def generar_excel_completo(desde_dt=None, hasta_dt=None):
         cell.font = header_font
         cell.alignment = Alignment(horizontal="center", vertical="center")
 
-    entradas = EntradaMercancia.objects.all().select_related('producto').order_by('-fecha_entrada')
+    entradas = EntradaMercancia.objects.all().select_related('producto').order_by('-fecha_entrada', '-id')
     if desde_dt:
         entradas = entradas.filter(fecha_entrada__gte=desde_dt)
     if hasta_dt:
@@ -189,7 +228,7 @@ def generar_excel_completo(desde_dt=None, hasta_dt=None):
     for e in entradas:
         ws_ent.append([
             e.id,
-            timezone.localtime(e.fecha_entrada).strftime("%d/%m/%Y %H:%M"),
+            timezone.localtime(e.fecha_entrada).strftime("%d/%m/%Y %I:%M %p"),
             e.producto.nombre,
             e.cantidad_recibida,
             e.cantidad_disponible,
@@ -204,9 +243,9 @@ def generar_excel_completo(desde_dt=None, hasta_dt=None):
     # ----------------------------------------------------
     ws_ven = wb.create_sheet(title="Ventas y Ganancia")
     headers_ven = [
-        "Código Venta", "Fecha", "Total Venta (Bs)", 
+        "Código Venta", "Fecha y Hora (Caracas)", "Total Venta (Bs)", 
         "Costo Mercancía (Bs)", "Ganancia Bruta (Bs)", 
-        "Tasa USD BCV", "Tasa USDT", "Observaciones"
+        "Vuelto Entregado (Bs)", "Tasa USD BCV", "Tasa USDT", "Observaciones"
     ]
     ws_ven.append(headers_ven)
     for col_num in range(1, len(headers_ven) + 1):
@@ -215,7 +254,7 @@ def generar_excel_completo(desde_dt=None, hasta_dt=None):
         cell.font = header_font
         cell.alignment = Alignment(horizontal="center", vertical="center")
 
-    ventas = Venta.objects.filter(anulada=False).order_by('-fecha')
+    ventas = Venta.objects.filter(anulada=False).order_by('-fecha', '-id')
     if desde_dt:
         ventas = ventas.filter(fecha__gte=desde_dt)
     if hasta_dt:
@@ -224,22 +263,24 @@ def generar_excel_completo(desde_dt=None, hasta_dt=None):
     for v in ventas:
         ws_ven.append([
             v.codigo,
-            timezone.localtime(v.fecha).strftime("%d/%m/%Y %H:%M"),
+            timezone.localtime(v.fecha).strftime("%d/%m/%Y %I:%M %p"),
             float(v.total_bs),
             float(v.costo_total_bs),
             float(v.ganancia_bruta_bs),
+            float(v.vuelto_total_bs),
             float(v.tasa_usd_bcv),
             float(v.tasa_usdt),
             v.observaciones
         ])
 
     # ----------------------------------------------------
-    # Hoja 4: Pagos
+    # Hoja 4: Cobros y Pagos
     # ----------------------------------------------------
-    ws_pag = wb.create_sheet(title="Detalle de Pagos")
+    ws_pag = wb.create_sheet(title="Cobros y Pagos")
     headers_pag = [
-        "Venta", "Fecha", "Medio", "Monto Original", 
-        "Moneda", "Tasa Aplicada", "Equivalente Bs", "Referencia"
+        "Venta", "Fecha y Hora", "Medio", "Moneda", 
+        "Monto Recibido", "Vuelto Entregado", "Cobro Neto (Orig)", 
+        "Tasa Aplicada", "Cobro Neto (Bs)", "Referencia"
     ]
     ws_pag.append(headers_pag)
     for col_num in range(1, len(headers_pag) + 1):
@@ -248,7 +289,7 @@ def generar_excel_completo(desde_dt=None, hasta_dt=None):
         cell.font = header_font
         cell.alignment = Alignment(horizontal="center", vertical="center")
 
-    pagos = PagoVenta.objects.filter(venta__anulada=False).select_related('venta').order_by('-venta__fecha')
+    pagos = PagoVenta.objects.filter(venta__anulada=False).select_related('venta').order_by('-venta__fecha', '-id')
     if desde_dt:
         pagos = pagos.filter(venta__fecha__gte=desde_dt)
     if hasta_dt:
@@ -257,23 +298,25 @@ def generar_excel_completo(desde_dt=None, hasta_dt=None):
     for p in pagos:
         ws_pag.append([
             p.venta.codigo,
-            timezone.localtime(p.venta.fecha).strftime("%d/%m/%Y %H:%M"),
+            timezone.localtime(p.venta.fecha).strftime("%d/%m/%Y %I:%M %p"),
             p.get_metodo_display(),
-            float(p.monto_original),
             p.moneda,
+            float(p.monto_recibido or p.monto_original),
+            float(p.vuelto_entregado),
+            float(p.monto_original),
             float(p.tasa_aplicada),
             float(p.monto_equivalente_bs),
             p.referencia
         ])
 
     # ----------------------------------------------------
-    # Hoja 5: Gastos y Egresos (Tienda vs Personal)
+    # Hoja 5: Gastos y Retiros
     # ----------------------------------------------------
-    ws_gas = wb.create_sheet(title="Gastos y Egresos")
+    ws_gas = wb.create_sheet(title="Gastos y Retiros")
     headers_gas = [
-        "ID", "Fecha", "Categoría", "Descripción", 
+        "ID", "Fecha y Hora", "Categoría", "Descripción / Concepto", 
         "Monto Original", "Moneda", "Tasa Aplicada", "Monto Equivalente (Bs)", 
-        "Medio Pago", "Comprobante", "Notas"
+        "Medio Pago", "Comprobante", "Observaciones"
     ]
     ws_gas.append(headers_gas)
     for col_num in range(1, len(headers_gas) + 1):
@@ -282,7 +325,7 @@ def generar_excel_completo(desde_dt=None, hasta_dt=None):
         cell.font = header_font
         cell.alignment = Alignment(horizontal="center", vertical="center")
 
-    gastos_list = Gasto.objects.all().order_by('-fecha')
+    gastos_list = Gasto.objects.all().order_by('-fecha', '-id')
     if desde_dt:
         gastos_list = gastos_list.filter(fecha__gte=desde_dt)
     if hasta_dt:
@@ -291,7 +334,7 @@ def generar_excel_completo(desde_dt=None, hasta_dt=None):
     for g in gastos_list:
         ws_gas.append([
             g.id,
-            timezone.localtime(g.fecha).strftime("%d/%m/%Y %H:%M"),
+            timezone.localtime(g.fecha).strftime("%d/%m/%Y %I:%M %p"),
             g.get_categoria_display(),
             g.descripcion,
             float(g.monto_original),
@@ -311,4 +354,3 @@ def generar_excel_completo(desde_dt=None, hasta_dt=None):
             sheet.column_dimensions[col_letter].width = max(max_len + 3, 12)
 
     return wb
-

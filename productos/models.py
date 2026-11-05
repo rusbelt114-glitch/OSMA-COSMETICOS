@@ -11,13 +11,13 @@ def normalizar_texto(texto):
 
 class Producto(models.Model):
     nombre = models.CharField(
-        max_length=120, 
+        max_length=255, 
         unique=True,
         verbose_name="Nombre y presentación",
         help_text="Ej: Corrector · tono 01"
     )
     nombre_busqueda = models.CharField(
-        max_length=150, 
+        max_length=255, 
         blank=True, 
         editable=False, 
         db_index=True

@@ -124,6 +124,13 @@ class Gasto(models.Model):
         blank=True,
         verbose_name="Nro. Recibo / Referencia"
     )
+    idempotency_key = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        unique=True,
+        verbose_name="Clave Idempotencia"
+    )
     observaciones = models.TextField(blank=True, verbose_name="Notas adicionales")
     fecha = models.DateTimeField(default=timezone.now, db_index=True)
     creado_el = models.DateTimeField(auto_now_add=True)

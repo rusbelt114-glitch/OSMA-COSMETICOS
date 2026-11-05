@@ -1,29 +1,130 @@
 import json
+import math
 from decimal import Decimal
+from datetime import datetime, time
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.contrib.auth.decorators import login_required
 from django.db.models import Sum, F
-from productos.models import Producto
+from django.utils import timezone
+import zoneinfo
+
+from productos.models import Producto, normalizar_texto
 from .models import EntradaMercancia
+
+CARACAS_TZ = zoneinfo.ZoneInfo("America/Caracas")
+
+def _parse_fecha_caracas(fecha_str, fin_del_dia=False):
+    if not fecha_str:
+        return None
+    try:
+        dt_naive = datetime.strptime(fecha_str.strip(), "%Y-%m-%d")
+        t = time.max if fin_del_dia else time.min
+        dt_aware = datetime.combine(dt_naive.date(), t, tzinfo=CARACAS_TZ)
+        return dt_aware
+    except (ValueError, TypeError):
+        return None
 
 @login_required
 @require_http_methods(["GET", "POST"])
 def api_entradas(request):
     if request.method == "GET":
-        entradas = EntradaMercancia.objects.select_related('producto').order_by('-fecha_entrada', '-id')[:20]
-        data = [{
-            'id': e.id,
-            'producto_id': e.producto.id,
-            'producto_nombre': e.producto.nombre,
-            'cantidad_recibida': e.cantidad_recibida,
-            'cantidad_disponible': e.cantidad_disponible,
-            'costo_unitario': float(e.costo_unitario),
-            'precio_venta': float(e.precio_venta),
-            'fecha': e.fecha_entrada.strftime("%d/%m/%Y"),
-            'observaciones': e.observaciones,
-        } for e in entradas]
-        return JsonResponse({'entradas': data})
+        qs = EntradaMercancia.objects.select_related('producto').order_by('-fecha_entrada', '-id')
+
+        # Filtro de búsqueda por texto o nombre
+        q = request.GET.get('q', '').strip()
+        if q:
+            q_norm = normalizar_texto(q)
+            qs = qs.filter(producto__nombre_busqueda__icontains=q_norm)
+
+        # Filtros de fecha en horario Caracas
+        filtro_fecha = request.GET.get('filtro_fecha', '').strip()
+        ahora_caracas = timezone.now().astimezone(CARACAS_TZ)
+
+        if filtro_fecha == 'hoy':
+            inicio = datetime.combine(ahora_caracas.date(), time.min, tzinfo=CARACAS_TZ)
+            fin = datetime.combine(ahora_caracas.date(), time.max, tzinfo=CARACAS_TZ)
+            qs = qs.filter(fecha_entrada__gte=inicio, fecha_entrada__lte=fin)
+        elif filtro_fecha == 'dia':
+            f_str = request.GET.get('fecha')
+            if f_str:
+                inicio = _parse_fecha_caracas(f_str, fin_del_dia=False)
+                fin = _parse_fecha_caracas(f_str, fin_del_dia=True)
+                if inicio and fin:
+                    qs = qs.filter(fecha_entrada__gte=inicio, fecha_entrada__lte=fin)
+        elif filtro_fecha == 'mes':
+            mes_str = request.GET.get('mes') # YYYY-MM
+            if mes_str:
+                try:
+                    parts = mes_str.split('-')
+                    y, m = int(parts[0]), int(parts[1])
+                    import calendar
+                    ultimo_dia = calendar.monthrange(y, m)[1]
+                    inicio = datetime(y, m, 1, 0, 0, 0, tzinfo=CARACAS_TZ)
+                    fin = datetime(y, m, ultimo_dia, 23, 59, 59, tzinfo=CARACAS_TZ)
+                    qs = qs.filter(fecha_entrada__gte=inicio, fecha_entrada__lte=fin)
+                except Exception:
+                    pass
+        elif filtro_fecha == 'rango':
+            desde_str = request.GET.get('desde')
+            hasta_str = request.GET.get('hasta')
+            desde_dt = _parse_fecha_caracas(desde_str, fin_del_dia=False)
+            hasta_dt = _parse_fecha_caracas(hasta_str, fin_del_dia=True)
+            if desde_dt:
+                qs = qs.filter(fecha_entrada__gte=desde_dt)
+            if hasta_dt:
+                qs = qs.filter(fecha_entrada__lte=hasta_dt)
+
+        total_entradas = qs.count()
+
+        # Paginación
+        try:
+            page = max(1, int(request.GET.get('page', 1)))
+        except (ValueError, TypeError):
+            page = 1
+        try:
+            page_size = min(100, max(1, int(request.GET.get('page_size', 10))))
+        except (ValueError, TypeError):
+            page_size = 10
+
+        limite = request.GET.get('limite')
+        if limite:
+            try:
+                page_size = max(1, int(limite))
+                page = 1
+            except Exception:
+                pass
+
+        total_paginas = max(1, math.ceil(total_entradas / page_size))
+        offset = (page - 1) * page_size
+        entradas = qs[offset:offset + page_size]
+
+        data = []
+        for e in entradas:
+            puede_anular = (e.cantidad_disponible == e.cantidad_recibida) and (not e.desgloses_venta.exists())
+            fecha_caracas = timezone.localtime(e.fecha_entrada, CARACAS_TZ)
+            data.append({
+                'id': e.id,
+                'producto_id': e.producto.id,
+                'producto_nombre': e.producto.nombre,
+                'cantidad_recibida': e.cantidad_recibida,
+                'cantidad_disponible': e.cantidad_disponible,
+                'costo_unitario': float(e.costo_unitario),
+                'precio_venta': float(e.precio_venta),
+                'fecha': fecha_caracas.strftime("%d/%m/%Y"),
+                'fecha_hora_12h': fecha_caracas.strftime("%d/%m/%Y %I:%M %p"),
+                'observaciones': e.observaciones,
+                'puede_anular': puede_anular,
+                'unidades_vendidas': e.cantidad_recibida - e.cantidad_disponible
+            })
+
+        return JsonResponse({
+            'entradas': data,
+            'total_entradas': total_entradas,
+            'total_paginas': total_paginas,
+            'pagina_actual': page,
+            'page_size': page_size
+        })
 
     elif request.method == "POST":
         try:
@@ -77,14 +178,16 @@ def api_entradas(request):
 @require_http_methods(["POST"])
 def api_eliminar_entrada(request, entrada_id):
     """
-    Permite anular/borrar una entrada de mercancía (por ejemplo, errores de carga o pruebas).
-    Si ya tiene ventas asociadas, se protege la integridad contable.
+    Permite anular/borrar una entrada de mercancía.
+    Si ya tiene unidades vendidas o ventas asociadas, se BLOQUEA la anulación directa
+    para garantizar la integridad contable y los costos históricos de FIFO.
     """
     try:
         entrada = EntradaMercancia.objects.get(id=entrada_id)
-        if entrada.desgloses_venta.exists():
+        if entrada.cantidad_disponible < entrada.cantidad_recibida or entrada.desgloses_venta.exists():
+            unidades_vendidas = entrada.cantidad_recibida - entrada.cantidad_disponible
             return JsonResponse({
-                'error': f'Esta entrada ya tiene ventas registradas. Para anularla primero debes anular la venta correspondiente en el panel de administración.'
+                'error': f'No se puede anular esta entrada porque ya tiene ventas asociadas (se han vendido {unidades_vendidas} unidades de este lote). Para anularla primero debes anular las ventas correspondientes en el panel.'
             }, status=400)
         
         producto = entrada.producto
@@ -114,7 +217,6 @@ def api_lotes_disponibles(request):
     ).select_related('producto').order_by('fecha_entrada', 'id')
 
     if q:
-        from productos.models import normalizar_texto
         q_norm = normalizar_texto(q)
         entradas = entradas.filter(producto__nombre_busqueda__icontains=q_norm)
 
@@ -125,7 +227,8 @@ def api_lotes_disponibles(request):
         'cantidad_disponible': e.cantidad_disponible,
         'precio_venta': float(e.precio_venta),
         'costo_unitario': float(e.costo_unitario),
-        'fecha': e.fecha_entrada.strftime("%d/%m/%Y"),
+        'fecha': timezone.localtime(e.fecha_entrada, CARACAS_TZ).strftime("%d/%m/%Y"),
+        'fecha_hora_12h': timezone.localtime(e.fecha_entrada, CARACAS_TZ).strftime("%d/%m/%Y %I:%M %p"),
     } for e in entradas]
 
     return JsonResponse({'lotes': data})

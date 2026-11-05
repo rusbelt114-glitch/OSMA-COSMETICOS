@@ -573,3 +573,32 @@ button.link {
     }
 }
 
+
+/* Mejoras de usabilidad, nombres largos y filtros de historial */
+.product-title-wrap {
+    white-space: normal !important;
+    word-break: break-word !important;
+    overflow-wrap: break-word !important;
+    line-height: 1.35;
+}
+.entry-history-toolbar {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-bottom: 12px;
+}
+.entry-history-toolbar input,
+.entry-history-toolbar select {
+    min-height: 38px;
+    padding: 6px 10px;
+    font-size: 0.88rem;
+}
+.pagination-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 14px;
+    padding-top: 10px;
+    border-top: 1px solid var(--line);
+}

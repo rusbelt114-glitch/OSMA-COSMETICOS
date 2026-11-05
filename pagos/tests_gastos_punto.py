@@ -140,4 +140,4 @@ class GastosYPuntoDeVentaTestCase(TestCase):
         self.assertEqual(resumen['total_ganancia'], Decimal('200.00')) # Ganancia Bruta
         self.assertEqual(resumen['total_gastos_tienda'], Decimal('50.00'))
         self.assertEqual(resumen['total_gastos_personal'], Decimal('30.00'))
-        self.assertEqual(resumen['ganancia_neta_real'], Decimal('120.00')) # 200 - 50 - 30 = 120 Bs
+        self.assertEqual(resumen['resultado_despues_gastos'], Decimal('150.00')) # 200 - 50 = 150 Bs

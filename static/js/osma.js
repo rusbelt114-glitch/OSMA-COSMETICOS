@@ -25,14 +25,18 @@
 
     let allProducts = [];
     let recentEntries = [];
+    let currentEntriesPage = 1;
+    let totalEntriesPages = 1;
     let availableLots = [];
     let cart = [];
     let currentSaleToken = null; // Token de idempotencia persistente por intento de venta
     let selectedProductId = null;
+    window.saleRatesFrozen = false; // Congelador de tasa en cobro activo
 
     // Mensaje de notificación
     function info(msg, isError = false) {
         const el = $('notice');
+        if (!el) return;
         el.textContent = msg;
         el.className = 'notice ' + (isError ? 'error' : '');
         if (msg) {
@@ -91,14 +95,19 @@
             const res = await fetch('/api/tasas/');
             const data = await res.json();
             if (data.usd_bcv) {
-                $('bar-usd-rate').textContent = 'Bs ' + fmt(data.usd_bcv);
-                $('rate-usd').value = data.usd_bcv.toFixed(2).replace('.', ',');
+                if ($('bar-usd-rate')) $('bar-usd-rate').textContent = 'Bs ' + fmt(data.usd_bcv);
+                // Si hay un cobro en curso con carrito activo, NO sobreescribir la tasa congelada
+                if (!window.saleRatesFrozen && $('rate-usd')) {
+                    $('rate-usd').value = data.usd_bcv.toFixed(2).replace('.', ',');
+                }
             }
             if (data.usdt) {
-                $('bar-usdt-rate').textContent = 'Bs ' + fmt(data.usdt);
-                $('rate-usdt').value = data.usdt.toFixed(2).replace('.', ',');
+                if ($('bar-usdt-rate')) $('bar-usdt-rate').textContent = 'Bs ' + fmt(data.usdt);
+                if (!window.saleRatesFrozen && $('rate-usdt')) {
+                    $('rate-usdt').value = data.usdt.toFixed(2).replace('.', ',');
+                }
             }
-            if (data.fecha_actualizacion) {
+            if (data.fecha_actualizacion && $('rates-updated-text')) {
                 $('rates-updated-text').textContent = 'Actualizado: ' + data.fecha_actualizacion;
             }
             updatePaymentCalculations();
@@ -107,30 +116,32 @@
         }
     }
 
-    $('btn-sync-rates').onclick = async () => {
-        $('btn-sync-rates').disabled = true;
-        $('btn-sync-rates').textContent = 'Consultando BCV...';
-        try {
-            const res = await fetch('/api/tasas/actualizar/', {
-                method: 'POST',
-                headers: getHeaders(),
-                body: JSON.stringify({})
-            });
-            const data = await res.json();
-            if (data.exito) {
-                info('Tasas actualizadas exitosamente con el BCV.');
-                await loadRates();
-            } else {
-                info(data.mensaje || 'No se pudo conectar al BCV. Se conservó la última tasa válida.', true);
+    if ($('btn-sync-rates')) {
+        $('btn-sync-rates').onclick = async () => {
+            $('btn-sync-rates').disabled = true;
+            $('btn-sync-rates').textContent = 'Consultando BCV...';
+            try {
+                const res = await fetch('/api/tasas/actualizar/', {
+                    method: 'POST',
+                    headers: getHeaders(),
+                    body: JSON.stringify({})
+                });
+                const data = await res.json();
+                if (data.exito) {
+                    info('Tasas actualizadas exitosamente con el BCV.');
+                    await loadRates();
+                } else {
+                    info(data.mensaje || 'No se pudo conectar al BCV. Se conservó la última tasa válida.', true);
+                }
+            } catch (e) {
+                console.error('Error sincronizando tasas:', e);
+                info('Error al intentar sincronizar tasas.', true);
+            } finally {
+                $('btn-sync-rates').disabled = false;
+                $('btn-sync-rates').textContent = '⟳ Actualizar tasas BCV';
             }
-        } catch (e) {
-            console.error('Error sincronizando tasas:', e);
-            info('Error al intentar sincronizar tasas.', true);
-        } finally {
-            $('btn-sync-rates').disabled = false;
-            $('btn-sync-rates').textContent = '⟳ Actualizar tasas BCV';
-        }
-    };
+        };
+    }
 
     // Actualización automática de tasas cada 15 minutos en segundo plano
     setInterval(async () => {
@@ -147,7 +158,7 @@
     }, 15 * 60 * 1000);
 
     // -------------------------------------------------------------------------
-    // 01 · ENTRADA DE PRODUCTOS
+    // 01 · ENTRADA DE PRODUCTOS (REGISTRAR ARRIBA + HISTORIAL PAGINADO DEBAJO)
     // -------------------------------------------------------------------------
     async function loadProducts() {
         try {
@@ -162,16 +173,76 @@
         }
     }
 
-    async function loadEntries() {
+    async function loadEntries(page = 1) {
+        currentEntriesPage = page;
+        const search = $('entry-search') ? $('entry-search').value.trim() : '';
+        const filterType = $('entry-date-filter') ? $('entry-date-filter').value : 'all';
+        const singleDate = $('entry-date-single') ? $('entry-date-single').value : '';
+        const monthDate = $('entry-date-month') ? $('entry-date-month').value : '';
+        const fromDate = $('entry-date-from') ? $('entry-date-from').value : '';
+        const toDate = $('entry-date-to') ? $('entry-date-to').value : '';
+
+        const params = new URLSearchParams({
+            page: page,
+            page_size: 10
+        });
+        if (search) params.append('q', search);
+        if (filterType && filterType !== 'all') {
+            params.append('filtro_fecha', filterType);
+            if (filterType === 'dia' && singleDate) params.append('fecha', singleDate);
+            if (filterType === 'mes' && monthDate) params.append('mes', monthDate);
+            if (filterType === 'rango') {
+                if (fromDate) params.append('desde', fromDate);
+                if (toDate) params.append('hasta', toDate);
+            }
+        }
+
         try {
-            const res = await fetch('/api/entradas/');
+            const res = await fetch(`/api/entradas/?${params.toString()}`);
             const data = await res.json();
             recentEntries = data.entradas || [];
-            renderRecentEntries();
+            totalEntriesPages = data.total_paginas || 1;
+            renderRecentEntries(data.total_entradas || 0, data.pagina_actual || 1, totalEntriesPages);
         } catch (e) {
             console.error('Error cargando entradas:', e);
         }
     }
+
+    // Control de filtros de fecha en historial de entradas
+    if ($('entry-date-filter')) {
+        $('entry-date-filter').onchange = () => {
+            const val = $('entry-date-filter').value;
+            if ($('entry-date-single')) $('entry-date-single').style.display = (val === 'dia') ? 'inline-block' : 'none';
+            if ($('entry-date-month')) $('entry-date-month').style.display = (val === 'mes') ? 'inline-block' : 'none';
+            if ($('entry-date-from')) $('entry-date-from').style.display = (val === 'rango') ? 'inline-block' : 'none';
+            if ($('entry-date-to')) $('entry-date-to').style.display = (val === 'rango') ? 'inline-block' : 'none';
+            if (val === 'all' || val === 'hoy') {
+                void loadEntries(1);
+            }
+        };
+    }
+    if ($('btn-filter-entries')) $('btn-filter-entries').onclick = () => void loadEntries(1);
+    if ($('btn-reset-entries')) {
+        $('btn-reset-entries').onclick = () => {
+            if ($('entry-search')) $('entry-search').value = '';
+            if ($('entry-date-filter')) $('entry-date-filter').value = 'all';
+            if ($('entry-date-single')) $('entry-date-single').style.display = 'none';
+            if ($('entry-date-month')) $('entry-date-month').style.display = 'none';
+            if ($('entry-date-from')) $('entry-date-from').style.display = 'none';
+            if ($('entry-date-to')) $('entry-date-to').style.display = 'none';
+            void loadEntries(1);
+        };
+    }
+    if ($('entry-search')) {
+        $('entry-search').onkeydown = e => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                void loadEntries(1);
+            }
+        };
+    }
+    if ($('btn-entry-prev')) $('btn-entry-prev').onclick = () => void loadEntries(currentEntriesPage - 1);
+    if ($('btn-entry-next')) $('btn-entry-next').onclick = () => void loadEntries(currentEntriesPage + 1);
 
     function renderSuggestions() {
         const query = norm($('lookup').value);
@@ -207,6 +278,7 @@
 
     function resetEntryForm() {
         selectedProductId = null;
+        window._confirmarCoincidenciaEntrada = false;
         $('entry-form').reset();
         $('name').readOnly = false;
         $('clear-selection').hidden = true;
@@ -257,10 +329,21 @@
                     cantidad: cantidad,
                     stock_minimo: stock_minimo,
                     costo_unitario: costo_unitario,
-                    precio_venta: precio_venta
+                    precio_venta: precio_venta,
+                    confirmar_coincidencia: window._confirmarCoincidenciaEntrada || false
                 })
             });
             const data = await res.json();
+            if (data.advertencia_coincidencia) {
+                const conf = confirm(`${data.mensaje}\n\n¿Deseas registrar este producto como un producto/tono/presentación nuevo independiente?`);
+                if (conf) {
+                    window._confirmarCoincidenciaEntrada = true;
+                    return handleSaveEntry(e);
+                }
+                return;
+            }
+            window._confirmarCoincidenciaEntrada = false;
+
             if (!res.ok) {
                 info(data.error || 'Error al guardar entrada.', true);
             } else {
@@ -268,7 +351,7 @@
                 resetEntryForm();
                 await Promise.all([
                     loadProducts(),
-                    loadEntries(),
+                    loadEntries(1),
                     loadLots(),
                     loadInventoryMetrics()
                 ]);
@@ -291,27 +374,47 @@
         }
     };
 
-    function renderRecentEntries() {
+    function renderRecentEntries(totalCount = 0, currentPage = 1, totalPages = 1) {
         const el = $('recent-entries');
+        if (!el) return;
         if (!recentEntries.length) {
-            el.innerHTML = '<div class="empty">Las entradas que registres aparecerán aquí.</div>';
+            el.innerHTML = '<div class="empty">No se encontraron movimientos para el filtro seleccionado.</div>';
+            if ($('entry-pagination')) $('entry-pagination').style.display = 'none';
             return;
         }
-        el.innerHTML = recentEntries.slice(0, 10).map(e => `
-            <div class="row">
-                <div>
-                    <b>${esc(e.producto_nombre)}</b>
-                    <small>${esc(e.fecha)} · ${e.cantidad_recibida} uds recibidas (${e.cantidad_disponible} disp.)</small>
-                    <button type="button" class="link" data-delete-entry="${e.id}" style="color: #b3382c; font-size: .75rem; padding: 0; margin-top: 4px;">
-                        ✕ Anular esta entrada
-                    </button>
+
+        el.innerHTML = recentEntries.map(e => `
+            <div class="row" style="align-items: flex-start; padding: 10px 0; border-bottom: 1px solid var(--line);">
+                <div style="flex: 1; padding-right: 12px;">
+                    <b class="product-title-wrap" style="display: block; font-size: 0.95rem;">${esc(e.producto_nombre)}</b>
+                    <small style="display: block; color: var(--muted); margin-top: 3px;">
+                        ${esc(e.fecha_hora_12h || e.fecha)} · ${e.cantidad_recibida} uds recibidas (${e.cantidad_disponible} disp. · ${e.unidades_vendidas || 0} vendidas)
+                    </small>
+                    ${e.observaciones ? `<small class="muted" style="display: block; font-style: italic;">Nota: ${esc(e.observaciones)}</small>` : ''}
+                    ${e.puede_anular ? `
+                        <button type="button" class="link" data-delete-entry="${e.id}" style="color: #b3382c; font-size: .78rem; padding: 0; margin-top: 6px;">
+                            ✕ Anular esta entrada
+                        </button>
+                    ` : `
+                        <span style="color: #888; font-size: .76rem; display: inline-block; margin-top: 6px;" title="No se puede anular: ya se vendieron unidades de este lote">
+                            🔒 Entrada con ventas asociadas (no anulable)
+                        </span>
+                    `}
                 </div>
-                <div style="text-align: right;">
-                    <span class="amount">Bs ${fmt(e.precio_venta)}</span>
-                    <small class="muted">Costo: Bs ${fmt(e.costo_unitario)}</small>
+                <div style="text-align: right; white-space: nowrap;">
+                    <span class="amount" style="font-size: 1.05rem;">Bs ${fmt(e.precio_venta)}</span>
+                    <small class="muted" style="display: block;">Costo: Bs ${fmt(e.costo_unitario)}</small>
                 </div>
             </div>
         `).join('');
+
+        const pagination = $('entry-pagination');
+        if (pagination) {
+            pagination.style.display = (totalPages > 1 || recentEntries.length >= 10) ? 'flex' : 'none';
+            if ($('entry-page-info')) $('entry-page-info').textContent = `Página ${currentPage} de ${totalPages} (Total: ${totalCount})`;
+            if ($('btn-entry-prev')) $('btn-entry-prev').disabled = currentPage <= 1;
+            if ($('btn-entry-next')) $('btn-entry-next').disabled = currentPage >= totalPages;
+        }
     }
 
     $('recent-entries').onclick = async e => {
@@ -330,7 +433,7 @@
                 info(data.mensaje);
                 await Promise.all([
                     loadProducts(),
-                    loadEntries(),
+                    loadEntries(currentEntriesPage),
                     loadLots(),
                     loadInventoryMetrics()
                 ]);
@@ -344,11 +447,11 @@
     };
 
     // -------------------------------------------------------------------------
-    // 02 · VENTAS Y PUNTO DE COBRO MULTI-MONEDA (POR LOTE O PRECIO PERSONALIZADO)
+    // 02 · VENTAS Y COBRO MIXTO (DÓLARES BCV, USDT SEPARADO, PENDIENTE DUAL)
     // -------------------------------------------------------------------------
     async function loadLots() {
         try {
-            const res = await fetch('/api/lotes/disponibles/');
+            const res = await fetch('/api/inventario/lotes/');
             const data = await res.json();
             availableLots = data.lotes || [];
             renderSellProductChoices();
@@ -358,235 +461,223 @@
     }
 
     function renderSellProductChoices() {
-        const query = norm($('sell-search').value);
         const select = $('sell-product-select');
+        const searchVal = norm($('sell-search').value);
+        if (!select) return;
 
-        const productosConStock = allProducts.filter(p => p.stock_total > 0 && norm(p.nombre).includes(query));
+        const filteredLots = availableLots.filter(l => norm(l.producto_nombre).includes(searchVal));
 
-        if (!productosConStock.length && !availableLots.length) {
-            select.innerHTML = '<option value="">No hay productos con existencias disponibles</option>';
-            $('add-cart').disabled = true;
-            $('sell-unit-price').value = '0,00';
+        if (!filteredLots.length) {
+            select.innerHTML = '<option value="">No hay productos disponibles en inventario</option>';
+            $('sell-unit-price').value = '';
             return;
         }
 
-        let html = '';
-        productosConStock.forEach(p => {
-            const lotesDelProd = availableLots.filter(l => l.producto_id === p.id && l.cantidad_disponible > 0);
-            
-            // Opción principal: FIFO Automático sobre todo el inventario del producto
-            html += `<option value="prod_${p.id}" data-type="prod" data-id="${p.id}" data-price="${p.ultimo_precio}" data-stock="${p.stock_total}">
-                ${esc(p.nombre)} · ${p.stock_total} disp. · Bs ${fmt(p.ultimo_precio)} (FIFO Automático)
-            </option>`;
+        select.innerHTML = filteredLots.map(l => 
+            `<option value="${l.lote_id}" data-price="${l.precio_venta}" data-prod="${l.producto_id}" data-max="${l.cantidad_disponible}">
+                ${esc(l.producto_nombre)} · ${l.cantidad_disponible} disp. (${l.fecha_hora_12h || l.fecha}) - Bs ${fmt(l.precio_venta)}
+            </option>`
+        ).join('');
 
-            // Opciones secundarias: si tiene varios lotes y el dueño prefiere vender de un lote específico
-            if (lotesDelProd.length > 1) {
-                lotesDelProd.forEach(l => {
-                    html += `<option value="lote_${l.lote_id}" data-type="lote" data-id="${l.lote_id}" data-prod-id="${p.id}" data-price="${l.precio_venta}" data-stock="${l.cantidad_disponible}">
-                        &nbsp;&nbsp;&nbsp;&nbsp;↳ Lote entrada ${esc(l.fecha)} · ${l.cantidad_disponible} disp. · Bs ${fmt(l.precio_venta)}
-                    </option>`;
-                });
-            }
-        });
-
-        if (!html && availableLots.length) {
-            availableLots.filter(l => norm(l.producto_nombre).includes(query)).forEach(l => {
-                html += `<option value="lote_${l.lote_id}" data-type="lote" data-id="${l.lote_id}" data-prod-id="${l.producto_id}" data-price="${l.precio_venta}" data-stock="${l.cantidad_disponible}">
-                    ${esc(l.producto_nombre)} · ${l.cantidad_disponible} disp. · Bs ${fmt(l.precio_venta)} (Lote ${esc(l.fecha)})
-                </option>`;
-            });
-        }
-
-        if (!html) {
-            select.innerHTML = '<option value="">No hay productos con existencias disponibles</option>';
-            $('add-cart').disabled = true;
-            $('sell-unit-price').value = '0,00';
-            return;
-        }
-
-        select.innerHTML = html;
-        $('add-cart').disabled = false;
-        updateSelectedProductPrice();
-    }
-
-    function updateSelectedProductPrice() {
-        const select = $('sell-product-select');
-        const opt = select.options[select.selectedIndex];
-        if (opt && opt.dataset.price) {
-            $('sell-unit-price').value = Number.parseFloat(opt.dataset.price).toFixed(2).replace('.', ',');
+        const selectedOpt = select.options[select.selectedIndex];
+        if (selectedOpt && selectedOpt.dataset.price) {
+            $('sell-unit-price').value = Number(selectedOpt.dataset.price).toFixed(2).replace('.', ',');
         }
     }
 
     $('sell-search').oninput = renderSellProductChoices;
-    $('sell-product-select').onchange = updateSelectedProductPrice;
-
-    function _agregarLoteAlCarrito(loteId, qty, unitPrice, prodId) {
-        const lote = availableLots.find(x => x.lote_id === loteId);
-        if (!lote) {
-            info('Lote no encontrado.', true);
-            return false;
+    $('sell-product-select').onchange = () => {
+        const opt = $('sell-product-select').options[$('sell-product-select').selectedIndex];
+        if (opt && opt.dataset.price) {
+            $('sell-unit-price').value = Number(opt.dataset.price).toFixed(2).replace('.', ',');
         }
-        const existing = cart.find(item => item.lote_id === loteId);
-        const totalQtyNeeded = (existing ? existing.cantidad : 0) + qty;
-        if (totalQtyNeeded > lote.cantidad_disponible) {
-            info(`Solo hay ${lote.cantidad_disponible} unidades disponibles en este lote.`, true);
+    };
+
+    function _agregarLoteAlCarrito(opt, unidades, precioUnitario) {
+        const loteId = Number(opt.value);
+        const prodId = Number(opt.dataset.prod);
+        const maxAvailable = Number(opt.dataset.max);
+        const prodName = opt.text.split('·')[0].trim();
+
+        const existing = cart.find(x => x.lote_id === loteId);
+        const currentQtyInCart = existing ? existing.cantidad : 0;
+
+        if ((currentQtyInCart + unidades) > maxAvailable) {
+            info(`Solo quedan ${maxAvailable} unidades disponibles en este lote. Tienes ${currentQtyInCart} en la venta.`, true);
             return false;
         }
 
         if (existing) {
-            existing.cantidad += qty;
-            existing.precio_unitario_bs = unitPrice;
+            existing.cantidad += unidades;
+            existing.precio_unitario_bs = precioUnitario;
         } else {
             cart.push({
+                producto_id: prodId,
                 lote_id: loteId,
-                producto_id: prodId,
-                nombre: `${lote.producto_nombre} (Lote ${lote.fecha})`,
-                cantidad: qty,
-                precio_unitario_bs: unitPrice
+                nombre: prodName,
+                cantidad: unidades,
+                precio_unitario_bs: precioUnitario
             });
         }
-        currentSaleToken = null;
-        info(`Agregado a la venta: ${lote.producto_nombre} a Bs ${fmt(unitPrice)}.`);
-        return true;
-    }
-
-    function _agregarProductoAlCarrito(prodId, qty, unitPrice) {
-        const prod = allProducts.find(x => x.id === prodId);
-        if (!prod) {
-            info('Producto no encontrado.', true);
-            return false;
-        }
-        const existing = cart.find(item => item.producto_id === prodId && !item.lote_id);
-        const totalQtyNeeded = (existing ? existing.cantidad : 0) + qty;
-        if (totalQtyNeeded > prod.stock_total) {
-            info(`Solo hay ${prod.stock_total} unidades disponibles en total para "${prod.nombre}".`, true);
-            return false;
-        }
-
-        if (existing) {
-            existing.cantidad += qty;
-            existing.precio_unitario_bs = unitPrice;
-        } else {
-            cart.push({
-                producto_id: prodId,
-                nombre: prod.nombre,
-                cantidad: qty,
-                precio_unitario_bs: unitPrice
-            });
-        }
-        currentSaleToken = null;
-        info(`Agregado a la venta: ${prod.nombre} a Bs ${fmt(unitPrice)}.`);
         return true;
     }
 
     $('add-cart').onclick = () => {
         const select = $('sell-product-select');
         const opt = select.options[select.selectedIndex];
-        if (!opt?.value) return;
-
-        const qty = Number.parseInt($('units').value, 10);
-        const unitPrice = parseMoney($('sell-unit-price').value);
-
-        if (Number.isNaN(qty) || qty <= 0) {
-            info('Por favor indica una cantidad mayor a 0.', true);
-            $('units').focus();
+        if (!opt || !opt.value) {
+            info('Selecciona un producto disponible.', true);
             return;
         }
-        if (unitPrice <= 0) {
+
+        const unidades = Number.parseInt($('units').value, 10);
+        const precioUnitario = parseMoney($('sell-unit-price').value);
+
+        if (Number.isNaN(unidades) || unidades <= 0) {
+            info('Ingresa una cantidad mayor a 0.', true);
+            return;
+        }
+        if (precioUnitario <= 0) {
             info('El precio de venta debe ser mayor a 0.', true);
-            $('sell-unit-price').focus();
             return;
         }
 
-        const id = Number(opt.dataset.id);
-        const type = opt.dataset.type;
-        const agregado = (type === 'lote')
-            ? _agregarLoteAlCarrito(id, qty, unitPrice, Number(opt.dataset.prodId))
-            : _agregarProductoAlCarrito(id, qty, unitPrice);
+        const agregado = _agregarLoteAlCarrito(opt, unidades, precioUnitario);
+        if (!agregado) return;
 
-        if (agregado) {
-            $('units').value = '1';
-            renderCart();
-        }
+        // Congelar tasas de la venta activa
+        window.saleRatesFrozen = true;
+        currentSaleToken = null; // Reiniciar token al cambiar ítems
+
+        renderCart();
+        updatePaymentCalculations();
+        info('Producto agregado a la venta actual.');
     };
 
     function renderCart() {
-        const cartEl = $('cart');
+        const el = $('cart');
         if (!cart.length) {
-            cartEl.innerHTML = '<div class="empty">Aún no hay productos en esta venta.</div>';
-            $('finish').disabled = true;
+            el.innerHTML = '<div class="empty">La venta actual está vacía. Agrega productos de la izquierda.</div>';
             $('sale-total').textContent = 'Bs 0,00';
+            window.saleRatesFrozen = false;
             updatePaymentCalculations();
             return;
         }
 
-        cartEl.innerHTML = cart.map((item, idx) => `
-            <div class="row">
-                <div>
-                    <b>${esc(item.nombre)}</b>
-                    <small>${item.cantidad} × Bs ${fmt(item.precio_unitario_bs)}</small>
+        let total = 0;
+        el.innerHTML = cart.map((item, idx) => {
+            const subtotal = item.cantidad * item.precio_unitario_bs;
+            total += subtotal;
+            return `
+                <div class="row">
+                    <div>
+                        <b>${esc(item.nombre)}</b>
+                        <small>${item.cantidad} x Bs ${fmt(item.precio_unitario_bs)}</small>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span class="amount">Bs ${fmt(subtotal)}</span>
+                        <button type="button" class="link" data-remove-item="${idx}" style="color: #b3382c; font-size: .8rem;">✕</button>
+                    </div>
                 </div>
-                <div style="display: flex; align-items: center; gap: 12px;">
-                    <span class="amount">Bs ${fmt(item.cantidad * item.precio_unitario_bs)}</span>
-                    <button type="button" class="link" data-remove-cart="${idx}" style="color: #b3382c;">Quitar</button>
-                </div>
-            </div>
-        `).join('');
+            `;
+        }).join('');
 
-        const total = cart.reduce((acc, i) => acc + (i.cantidad * i.precio_unitario_bs), 0);
         $('sale-total').textContent = 'Bs ' + fmt(total);
-        $('finish').disabled = false;
-        updatePaymentCalculations();
     }
 
     $('cart').onclick = e => {
-        const btn = e.target.closest('[data-remove-cart]');
-        if (!btn) return;
-        const idx = Number(btn.dataset.removeCart);
-        cart.splice(idx, 1);
-        currentSaleToken = null;
-        renderCart();
+        const btn = e.target.closest('[data-remove-item]');
+        if (btn) {
+            const idx = Number(btn.dataset.removeItem);
+            cart.splice(idx, 1);
+            currentSaleToken = null;
+            if (!cart.length) window.saleRatesFrozen = false;
+            renderCart();
+            updatePaymentCalculations();
+        }
     };
 
+    // -------------------------------------------------------------------------
+    // CÁLCULO EN TIEMPO REAL DE COBRO MIXTO, SALDO PENDIENTE DUAL Y VUELTO REAL
+    // -------------------------------------------------------------------------
     function updatePaymentCalculations() {
         const totalSale = cart.reduce((acc, i) => acc + (i.cantidad * i.precio_unitario_bs), 0);
-        const payBs = parseMoney($('pay-bs').value);
-        const payMobile = parseMoney($('pay-mobile').value);
-        const payPunto = parseMoney($('pay-punto').value);
-        const payUsd = parseMoney($('pay-usd').value);
-        const payUsdt = parseMoney($('pay-usdt').value);
+        const payBs = parseMoney($('pay-bs') ? $('pay-bs').value : 0);
+        const payMobile = parseMoney($('pay-mobile') ? $('pay-mobile').value : 0);
+        const payPunto = parseMoney($('pay-punto') ? $('pay-punto').value : 0);
+        const payUsd = parseMoney($('pay-usd') ? $('pay-usd').value : 0);
+        const payUsdt = parseMoney($('pay-usdt') ? $('pay-usdt').value : 0);
 
-        const rateUsd = parseMoney($('rate-usd').value);
-        const rateUsdt = parseMoney($('rate-usdt').value);
+        const rateUsd = parseMoney($('rate-usd') ? $('rate-usd').value : 0);
+        const rateUsdt = parseMoney($('rate-usdt') ? $('rate-usdt').value : 0);
 
+        // Conversión estricta: Dólares con tasa BCV aplicada; USDT con tasa USDT
+        const equivBsCash = payBs;
+        const equivMobile = payMobile;
+        const equivPunto = payPunto;
         const equivUsd = payUsd * rateUsd;
         const equivUsdt = payUsdt * rateUsdt;
-        const totalPaid = payBs + payMobile + payPunto + equivUsd + equivUsdt;
+        const totalPaid = equivBsCash + equivMobile + equivPunto + equivUsd + equivUsdt;
+
+        // Actualizar total de la venta en bolívares
+        if ($('live-sale-total')) $('live-sale-total').textContent = `Bs ${fmt(totalSale)}`;
+
+        // Monto recibido por cada medio y su moneda original
+        const breakdownParts = [];
+        if (payBs > 0) breakdownParts.push(`• Efectivo en Bs: <b>Bs ${fmt(payBs)}</b>`);
+        if (payMobile > 0) breakdownParts.push(`• Pago Móvil: <b>Bs ${fmt(payMobile)}</b>`);
+        if (payPunto > 0) breakdownParts.push(`• Punto de Venta: <b>Bs ${fmt(payPunto)}</b>`);
+        if (payUsd > 0) breakdownParts.push(`• Efectivo USD: <b>$ ${fmt(payUsd)}</b> (= Bs ${fmt(equivUsd)} a tasa BCV ${fmt(rateUsd)})`);
+        if (payUsdt > 0) breakdownParts.push(`• USDT: <b>${fmt(payUsdt)} USDT</b> (= Bs ${fmt(equivUsdt)} a tasa ${fmt(rateUsdt)})`);
+
+        if ($('live-received-breakdown')) {
+            $('live-received-breakdown').innerHTML = breakdownParts.length 
+                ? breakdownParts.join('<br>') 
+                : '<span class="muted">Sin montos ingresados aún</span>';
+        }
+
+        // Total recibido equivalente en bolívares
+        if ($('live-total-received')) {
+            $('live-total-received').textContent = `Bs ${fmt(totalPaid)}`;
+        }
+
+        const pendingBox = $('live-pending-box');
+        const pendingText = $('live-pending-text');
+        const surplusBox = $('live-surplus-box');
+        const surplusText = $('live-surplus-text');
+        const surplusDetail = $('live-surplus-detail');
 
         const diff = totalSale - totalPaid;
-        const convEl = $('conversion');
 
-        if (totalPaid === 0 && totalSale === 0) {
-            convEl.textContent = '';
-            return;
-        }
-
-        let txt = `Total recibido: Bs ${fmt(totalPaid)}`;
-        if (Math.abs(diff) < 0.05) {
-            txt += ' · ¡Pago exacto!';
-            convEl.style.color = '#376d5e';
-        } else if (diff > 0) {
-            txt += ` · Faltan Bs ${fmt(diff)}`;
-            convEl.style.color = '#b3382c';
+        if (diff > 0.05) {
+            // Saldo pendiente expresado en ambas monedas (Bs y USD a tasa oficial BCV de la venta)
+            const pendingUsd = rateUsd > 0 ? (diff / rateUsd) : 0;
+            if (pendingBox) pendingBox.style.display = 'block';
+            if (pendingText) {
+                pendingText.textContent = `Pendiente: Bs ${fmt(diff)}, equivalentes a USD ${fmt(pendingUsd)} (calculados a tasa BCV ${fmt(rateUsd)} Bs/$)`;
+            }
+            if (surplusBox) surplusBox.style.display = 'none';
         } else {
-            txt += ` · Cambio a entregar: Bs ${fmt(Math.abs(diff))}`;
-            convEl.style.color = '#376d5e';
+            // Cubierto completo o sobrepago con vuelto
+            if (pendingBox) pendingBox.style.display = 'none';
+            if (surplusBox) surplusBox.style.display = 'block';
+
+            if (Math.abs(diff) <= 0.05) {
+                if (surplusText) surplusText.textContent = '¡Pago exacto completado!';
+                if (surplusDetail) surplusDetail.textContent = `Cobro neto exacto: Bs ${fmt(totalSale)}`;
+            } else {
+                const surplusBs = Math.abs(diff);
+                const surplusUsd = rateUsd > 0 ? (surplusBs / rateUsd) : 0;
+                if (surplusText) surplusText.textContent = `Cambio / Vuelto a entregar en efectivo: Bs ${fmt(surplusBs)}`;
+                if (surplusDetail) {
+                    surplusDetail.innerHTML = `Monto recibido: <b>Bs ${fmt(totalPaid)}</b> · Vuelto entregado: <b>Bs ${fmt(surplusBs)}</b> (o USD ${fmt(surplusUsd)}) · Cobro neto: <b>Bs ${fmt(totalSale)}</b>`;
+                }
+            }
         }
-        convEl.textContent = txt;
     }
 
     ['pay-bs', 'pay-mobile', 'pay-punto', 'pay-usd', 'pay-usdt', 'rate-usd', 'rate-usdt'].forEach(id => {
-        $(id).oninput = updatePaymentCalculations;
+        if ($(id)) $(id).oninput = updatePaymentCalculations;
     });
 
     $('finish').onclick = async () => {
@@ -625,8 +716,6 @@
         $('finish').textContent = 'Registrando venta...';
 
         try {
-            // Conservar el mismo token de venta mientras no se modifique el carrito
-            // para garantizar idempotencia exacta en reintentos o fallos de red
             if (!currentSaleToken) {
                 currentSaleToken = (window.crypto && crypto.randomUUID) 
                     ? crypto.randomUUID() 
@@ -651,22 +740,35 @@
                 return;
             }
             const data = await res.json();
-            if (!res.ok) {
-                info(data.error || 'Error al procesar venta.', true);
-            } else {
-                info(data.mensaje);
+            if (res.ok) {
+                let msgExito = `${data.mensaje}`;
+                if (data.vuelto_total_bs > 0) {
+                    msgExito += ` · Vuelto a entregar al cliente: Bs ${fmt(data.vuelto_total_bs)}.`;
+                }
+                info(msgExito);
+
+                // Limpiar carrito y descongelar tasas
                 cart = [];
-                currentSaleToken = null; // Liberar token tras confirmación exitosa
+                currentSaleToken = null;
+                window.saleRatesFrozen = false;
+                ['pay-bs', 'pay-mobile', 'pay-punto', 'pay-usd', 'pay-usdt'].forEach(id => {
+                    if ($(id)) $(id).value = '0';
+                });
                 renderCart();
-                ['pay-bs', 'pay-mobile', 'pay-punto', 'pay-usd', 'pay-usdt'].forEach(id => { $(id).value = '0'; });
                 updatePaymentCalculations();
-                await loadProducts();
-                await loadLots();
-                await loadInventoryMetrics();
+
+                await Promise.all([
+                    loadProducts(),
+                    loadEntries(1),
+                    loadLots(),
+                    loadInventoryMetrics()
+                ]);
+            } else {
+                info(data.error || 'No se pudo procesar la venta.', true);
             }
         } catch (e) {
-            console.error('Error venta:', e);
-            info('Error al registrar la venta. Verifica montos o sesión.', true);
+            console.error('Error procesando venta:', e);
+            info('Error de red al intentar procesar la venta.', true);
         } finally {
             $('finish').disabled = false;
             $('finish').textContent = 'Confirmar y registrar venta';
@@ -680,9 +782,9 @@
         try {
             const res = await fetch('/api/inventario/metricas/');
             const data = await res.json();
-            $('product-count').textContent = data.total_productos || 0;
-            $('stock-count').textContent = data.unidades_disponibles || 0;
-            $('stock-value').textContent = 'Bs ' + fmt(data.valor_venta_disponible);
+            if ($('product-count')) $('product-count').textContent = data.total_productos || 0;
+            if ($('stock-count')) $('stock-count').textContent = data.unidades_disponibles || 0;
+            if ($('stock-value')) $('stock-value').textContent = 'Bs ' + fmt(data.valor_venta_disponible);
         } catch (e) {
             console.error('Error cargando métricas:', e);
         }
@@ -711,11 +813,13 @@
             }
 
             return `
-                <div class="row">
-                    <div style="flex: 1;">
-                        <b>${esc(p.nombre)}</b>
-                        <small>${p.stock_total} unidades disponibles · mínimo de alerta: ${p.stock_minimo} · Precio: Bs ${fmt(p.ultimo_precio)}</small>
-                        <div class="track">
+                <div class="row" style="align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line);">
+                    <div style="flex: 1; padding-right: 10px;">
+                        <b class="product-title-wrap" style="display: block;">${esc(p.nombre)}</b>
+                        <small style="display: block; color: var(--muted); margin-top: 3px;">
+                            ${p.stock_total} unidades disponibles · mínimo de alerta: ${p.stock_minimo} · Precio: Bs ${fmt(p.ultimo_precio)}
+                        </small>
+                        <div class="track" style="margin-top: 6px;">
                             <div class="bar ${isLow ? 'warnbar' : ''}" style="width: ${barWidth}%"></div>
                         </div>
                     </div>
@@ -751,20 +855,189 @@
                 if (res.ok) {
                     info(data.mensaje);
                     await loadProducts();
-                    await loadEntries();
+                    await loadEntries(1);
                     await loadInventoryMetrics();
                 } else {
                     info(data.error || 'No se pudo eliminar el producto.', true);
                 }
             } catch (err) {
                 console.error('Error al eliminar producto:', err);
-                info('Error de red al intentar eliminar el producto.', true);
             }
         }
     };
 
     // -------------------------------------------------------------------------
-    // 04 · ANÁLISIS, REPORTES Y GANANCIA BRUTA
+    // 04 · CONTROL DE GASTOS Y RETIROS (IDEMPOTENCIA ANTI-DUPLICADOS)
+    // -------------------------------------------------------------------------
+    async function loadExpenses() {
+        const from = $('from-date') ? $('from-date').value : '';
+        const to = $('to-date') ? $('to-date').value : '';
+        let url = '/api/gastos/?';
+        if (from) url += `desde=${encodeURIComponent(from)}&`;
+        if (to) url += `hasta=${encodeURIComponent(to)}`;
+
+        try {
+            const res = await fetch(url);
+            const data = await res.json();
+
+            if ($('expense-store-total')) $('expense-store-total').textContent = 'Bs ' + fmt(data.total_tienda_bs);
+            if ($('expense-owner-total')) $('expense-owner-total').textContent = 'Bs ' + fmt(data.total_personal_bs);
+            if ($('expense-total-metric')) $('expense-total-metric').textContent = 'Bs ' + fmt(data.total_general_bs);
+            if ($('expense-count')) $('expense-count').textContent = data.num_gastos || 0;
+
+            const listEl = $('expense-list');
+            if (!listEl) return;
+
+            if (!data.gastos || !data.gastos.length) {
+                listEl.innerHTML = '<div class="empty">No hay gastos ni retiros registrados en este período.</div>';
+                return;
+            }
+
+            listEl.innerHTML = data.gastos.map(g => {
+                const isPersonal = g.categoria === 'PERSONAL';
+                return `
+                    <div class="row" style="padding: 10px 0; border-bottom: 1px solid var(--line);">
+                        <div>
+                            <b>${esc(g.descripcion)}</b>
+                            <span class="pill ${isPersonal ? 'warn' : ''}" style="margin-left: 6px; font-size: .7rem; ${isPersonal ? 'background: #f3e8ff; color: #6b21a8;' : ''}">
+                                ${isPersonal ? 'Personal / Dueño' : 'Tienda / Operativo'}
+                            </span>
+                            <small style="display: block; color: var(--muted); margin-top: 2px;">
+                                ${esc(g.fecha)} · Pagado vía ${esc(g.metodo_label)}${g.comprobante ? ` (Ref: ${esc(g.comprobante)})` : ''}
+                            </small>
+                            ${g.observaciones ? `<small class="muted" style="display: block; font-style: italic;">${esc(g.observaciones)}</small>` : ''}
+                        </div>
+                        <div style="text-align: right; display: flex; align-items: center; gap: 10px;">
+                            <div>
+                                <span class="amount" style="color: #b3382c;">Bs ${fmt(g.monto_equivalente_bs)}</span>
+                                ${g.moneda !== 'BS' ? `<small class="muted" style="display:block;">${g.moneda} ${fmt(g.monto_original)}</small>` : ''}
+                            </div>
+                            <button type="button" class="link" data-delete-expense="${g.id}" style="color: #b3382c; font-size: .78rem;" title="Eliminar gasto">
+                                Borrar
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        } catch (e) {
+            console.error('Error cargando gastos:', e);
+        }
+    }
+
+    if ($('expense-currency')) {
+        $('expense-currency').onchange = () => {
+            const curr = $('expense-currency').value;
+            if (curr === 'USD') {
+                $('expense-rate').value = $('rate-usd').value;
+                $('expense-method').value = 'EFECTIVO_USD';
+            } else if (curr === 'USDT') {
+                $('expense-rate').value = $('rate-usdt').value;
+                $('expense-method').value = 'USDT';
+            } else {
+                $('expense-rate').value = '1.00';
+                $('expense-method').value = 'EFECTIVO_BS';
+            }
+        };
+    }
+
+    if ($('btn-save-expense')) {
+        $('btn-save-expense').onclick = async () => {
+            const desc = $('expense-desc').value.trim();
+            const cat = $('expense-cat').value;
+            const currency = $('expense-currency').value;
+            const amount = parseMoney($('expense-amount').value);
+            const method = $('expense-method').value;
+            const ref = $('expense-ref').value.trim();
+            const rate = parseMoney($('expense-rate').value) || 1.0;
+            const notes = $('expense-notes').value.trim();
+
+            if (!desc) {
+                info('Indica la descripción o motivo del gasto.', true);
+                $('expense-desc').focus();
+                return;
+            }
+
+            if (amount <= 0) {
+                info('El monto del gasto debe ser mayor a cero.', true);
+                $('expense-amount').focus();
+                return;
+            }
+
+            $('btn-save-expense').disabled = true;
+            $('btn-save-expense').textContent = 'Guardando egreso...';
+
+            const expenseToken = (window.crypto && crypto.randomUUID) 
+                ? crypto.randomUUID() 
+                : ('EXP-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9));
+
+            try {
+                const res = await fetch('/api/gastos/', {
+                    method: 'POST',
+                    headers: getHeaders(),
+                    body: JSON.stringify({
+                        descripcion: desc,
+                        categoria: cat,
+                        moneda: currency,
+                        monto: amount,
+                        metodo: method,
+                        tasa: rate,
+                        comprobante: ref,
+                        observaciones: notes,
+                        idempotency_key: expenseToken
+                    })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    info(data.mensaje);
+                    $('expense-desc').value = '';
+                    $('expense-amount').value = '';
+                    $('expense-ref').value = '';
+                    $('expense-notes').value = '';
+                    await loadExpenses();
+                    await loadReport();
+                } else {
+                    info(data.error || 'Error al guardar el gasto.', true);
+                }
+            } catch (e) {
+                console.error('Error al registrar gasto:', e);
+                info('Error de red al intentar registrar el gasto.', true);
+            } finally {
+                $('btn-save-expense').disabled = false;
+                $('btn-save-expense').textContent = 'Registrar gasto / salida';
+            }
+        };
+    }
+
+    if ($('expense-list')) {
+        $('expense-list').onclick = async e => {
+            const delBtn = e.target.closest('[data-delete-expense]');
+            if (delBtn) {
+                const id = Number(delBtn.dataset.deleteExpense);
+                if (!confirm('¿Estás seguro de eliminar este registro de gasto?')) return;
+
+                try {
+                    const res = await fetch(`/api/gastos/${id}/eliminar/`, {
+                        method: 'POST',
+                        headers: getHeaders()
+                    });
+                    const data = await res.json();
+                    if (res.ok) {
+                        info(data.mensaje);
+                        await loadExpenses();
+                        await loadReport();
+                    } else {
+                        info(data.error || 'No se pudo eliminar el gasto.', true);
+                    }
+                } catch (err) {
+                    console.error('Error al eliminar gasto:', err);
+                    info('Error de red al eliminar el gasto.', true);
+                }
+            }
+        };
+    }
+
+    // -------------------------------------------------------------------------
+    // 05 · ANÁLISIS Y REPORTES (RESUMEN DEL PERÍODO + INVENTARIO ACTUAL)
     // -------------------------------------------------------------------------
     async function loadReport() {
         const from = $('from-date').value;
@@ -773,101 +1046,123 @@
         if (from) url += `desde=${encodeURIComponent(from)}&`;
         if (to) url += `hasta=${encodeURIComponent(to)}`;
 
-        // Actualizar link de descarga de Excel
         let excelUrl = '/reportes/excel/?';
         if (from) excelUrl += `desde=${encodeURIComponent(from)}&`;
         if (to) excelUrl += `hasta=${encodeURIComponent(to)}`;
-        $('download-report-excel').href = excelUrl;
-        $('download-stock-excel').href = excelUrl;
+        if ($('download-report-excel')) $('download-report-excel').href = excelUrl;
+        if ($('download-stock-excel')) $('download-stock-excel').href = excelUrl;
 
         try {
             const res = await fetch(url);
             const data = await res.json();
 
-            $('sold-count').textContent = data.total_unidades_vendidas || 0;
-            $('sales-value').textContent = 'Bs ' + fmt(data.total_ingresos);
-            $('profit-value').textContent = 'Bs ' + fmt(data.total_ganancia);
-            if ($('expenses-report-value')) $('expenses-report-value').textContent = 'Bs ' + fmt(data.total_gastos_general || 0);
-            if ($('exp-store-sub')) $('exp-store-sub').textContent = 'Bs ' + fmt(data.total_gastos_tienda || 0);
-            if ($('exp-pers-sub')) $('exp-pers-sub').textContent = 'Bs ' + fmt(data.total_gastos_personal || 0);
-            if ($('net-profit-value')) $('net-profit-value').textContent = 'Bs ' + fmt(data.ganancia_neta_real || 0);
+            // Bloque A · Métricas del período
+            if ($('sold-count')) $('sold-count').textContent = data.total_unidades_vendidas || 0;
+            if ($('sales-value')) $('sales-value').textContent = 'Bs ' + fmt(data.total_ingresos);
+            if ($('cost-value')) $('cost-value').textContent = 'Bs ' + fmt(data.total_costos || 0);
+            if ($('profit-value')) $('profit-value').textContent = 'Bs ' + fmt(data.total_ganancia);
+            if ($('expenses-store-metric')) $('expenses-store-metric').textContent = 'Bs ' + fmt(data.total_gastos_tienda || 0);
+            if ($('net-profit-value')) $('net-profit-value').textContent = 'Bs ' + fmt(data.resultado_despues_gastos || data.ganancia_neta_real || 0);
+            if ($('expenses-personal-metric')) $('expenses-personal-metric').textContent = 'Bs ' + fmt(data.total_gastos_personal || 0);
 
-            $('period-info').textContent = `${data.num_ventas} venta(s) registradas en este período.`;
+            if ($('period-info')) $('period-info').textContent = `${data.num_ventas} venta(s) registradas en este período.`;
+
+            // Bloque B · Inventario actual a la fecha de consulta
+            if (data.inventario_actual) {
+                if ($('inv-consult-date')) $('inv-consult-date').textContent = `Al corte de: ${data.inventario_actual.fecha_consulta}`;
+                if ($('inv-active-prods')) $('inv-active-prods').textContent = data.inventario_actual.total_productos_activos || 0;
+                if ($('inv-total-units')) $('inv-total-units').textContent = data.inventario_actual.unidades_disponibles || 0;
+                if ($('inv-cost-value')) $('inv-cost-value').textContent = 'Bs ' + fmt(data.inventario_actual.inversion_existencias || 0);
+                if ($('inv-potential-sale')) $('inv-potential-sale').textContent = 'Bs ' + fmt(data.inventario_actual.venta_potencial || 0);
+            }
 
             // Productos vendidos
             const soldEl = $('sold-products');
-            if (!data.productos_vendidos.length) {
-                soldEl.innerHTML = '<div class="empty">No hubo ventas de productos en este período.</div>';
-            } else {
-                soldEl.innerHTML = data.productos_vendidos.map(p => `
-                    <div class="row">
-                        <div>
-                            <b>${esc(p.nombre)}</b>
-                            <small>${p.unidades} unidades · Ventas: Bs ${fmt(p.ingresos)}</small>
+            if (soldEl) {
+                if (!data.productos_vendidos.length) {
+                    soldEl.innerHTML = '<div class="empty">No hubo ventas de productos en este período.</div>';
+                } else {
+                    soldEl.innerHTML = data.productos_vendidos.map(p => `
+                        <div class="row" style="padding: 8px 0; border-bottom: 1px solid var(--line);">
+                            <div>
+                                <b class="product-title-wrap" style="display: block;">${esc(p.nombre)}</b>
+                                <small>${p.unidades} unidades · Ventas: Bs ${fmt(p.ingresos)}</small>
+                            </div>
+                            <div style="text-align: right;">
+                                <span class="amount" style="color: #376d5e;">Ganancia: Bs ${fmt(p.ganancia)}</span>
+                                <small class="muted" style="display: block;">Costo: Bs ${fmt(p.costo)}</small>
+                            </div>
                         </div>
-                        <div style="text-align: right;">
-                            <span class="amount" style="color: #376d5e;">Ganancia: Bs ${fmt(p.ganancia)}</span>
-                            <small class="muted">Costo: Bs ${fmt(p.costo)}</small>
-                        </div>
-                    </div>
-                `).join('');
+                    `).join('');
+                }
             }
 
-            // Cobros por medio
+            // Cobros por medio (recibido, vuelto y neto)
             const payEl = $('payment-totals');
-            if (!data.cobros_por_medio.length) {
-                payEl.innerHTML = '<div class="empty">Sin pagos registrados en este período.</div>';
-            } else {
-                payEl.innerHTML = data.cobros_por_medio.map(c => `
-                    <div class="row">
-                        <div>
-                            <b>${esc(c.metodo)}</b>
-                            <small>${c.transacciones} operaciones</small>
+            if (payEl) {
+                if (!data.cobros_por_medio.length) {
+                    payEl.innerHTML = '<div class="empty">Sin pagos registrados en este período.</div>';
+                } else {
+                    payEl.innerHTML = data.cobros_por_medio.map(c => `
+                        <div class="row" style="padding: 8px 0; border-bottom: 1px solid var(--line);">
+                            <div>
+                                <b>${esc(c.metodo)}</b>
+                                <small style="display: block;">${c.transacciones} operaciones · Recibido: ${esc(c.moneda)} ${fmt(c.monto_recibido || c.total_original)}</small>
+                                ${(c.vuelto_entregado_bs > 0) ? `<small style="color: #b3382c; display: block;">Vuelto entregado: Bs ${fmt(c.vuelto_entregado_bs)}</small>` : ''}
+                            </div>
+                            <div style="text-align: right;">
+                                <span class="amount">Neto: Bs ${fmt(c.total_bs)}</span>
+                                <small class="muted" style="display: block;">${esc(c.moneda)} ${fmt(c.total_original)}</small>
+                            </div>
                         </div>
-                        <div style="text-align: right;">
-                            <span class="amount">${esc(c.moneda)} ${fmt(c.total_original)}</span>
-                            <small class="muted">= Bs ${fmt(c.total_bs)}</small>
-                        </div>
-                    </div>
-                `).join('');
+                    `).join('');
+                }
             }
 
-            // Productos por reponer
+            // Productos por reponer (solo alertas de stock)
             const alertEl = $('short-list');
-            if (!data.productos_alerta.length) {
-                alertEl.innerHTML = '<div class="empty">Todo el inventario se encuentra en niveles normales.</div>';
-            } else {
-                alertEl.innerHTML = data.productos_alerta.map(p => `
-                    <div class="row">
-                        <div>
-                            <b>${esc(p.nombre)}</b>
-                            <small>Quedan ${p.stock_actual} uds · mínimo de aviso: ${p.stock_minimo}</small>
+            if (alertEl) {
+                if (!data.productos_alerta.length) {
+                    alertEl.innerHTML = '<div class="empty">Todo el inventario se encuentra en niveles normales.</div>';
+                } else {
+                    alertEl.innerHTML = data.productos_alerta.map(p => `
+                        <div class="row">
+                            <div>
+                                <b class="product-title-wrap" style="display: block;">${esc(p.nombre)}</b>
+                                <small>Quedan ${p.stock_actual} uds · mínimo de aviso: ${p.stock_minimo}</small>
+                            </div>
+                            <span class="pill warn">${p.estado === 'agotado' ? 'Agotado' : 'Reponer'}</span>
                         </div>
-                        <span class="pill warn">${p.estado === 'agotado' ? 'Agotado' : 'Reponer'}</span>
-                    </div>
-                `).join('');
+                    `).join('');
+                }
             }
 
             // Detalle de ventas con soporte de anulación
             const logEl = $('sales-log');
-            if (!data.ventas.length) {
-                logEl.innerHTML = '<div class="empty">No hay ventas para el período seleccionado.</div>';
-            } else {
-                logEl.innerHTML = data.ventas.map(v => `
-                    <div class="row" style="${v.anulada ? 'opacity: 0.6; background: #fff5f5;' : ''}">
-                        <div>
-                            <b>${esc(v.codigo)}</b> · <span class="muted">${esc(v.fecha)}</span>
-                            ${v.anulada ? '<span style="background: #fde8e8; color: #9b1c1c; font-size: .7rem; padding: 2px 6px; border-radius: 4px; font-weight: bold; margin-left: 6px;">ANULADA</span>' : ''}
-                            <small>${esc(v.articulos)}</small>
-                            <small class="muted">Cobro: ${esc(v.medios)}${v.vuelto_total_bs > 0 ? ` (Vuelto entregado: Bs ${fmt(v.vuelto_total_bs)})` : ''}</small>
+            if (logEl) {
+                if (!data.ventas.length) {
+                    logEl.innerHTML = '<div class="empty">No hay ventas para el período seleccionado.</div>';
+                } else {
+                    logEl.innerHTML = data.ventas.map(v => `
+                        <div class="row" style="${v.anulada ? 'opacity: 0.6; background: #fff5f5;' : ''}; padding: 10px 0; border-bottom: 1px solid var(--line);">
+                            <div>
+                                <b>${esc(v.codigo)}</b> · <span class="muted">${esc(v.fecha)}</span>
+                                ${v.anulada ? '<span style="background: #fde8e8; color: #9b1c1c; font-size: .7rem; padding: 2px 6px; border-radius: 4px; font-weight: bold; margin-left: 6px;">ANULADA</span>' : ''}
+                                <small style="display: block; margin-top: 3px;">Artículos: ${esc(v.articulos)}</small>
+                                <small style="display: block; color: var(--muted);">Pagos: ${esc(v.medios)}${v.vuelto_total_bs > 0 ? ` · Vuelto: Bs ${fmt(v.vuelto_total_bs)}` : ''}</small>
+                                ${!v.anulada ? `
+                                    <button type="button" class="link" onclick="window.anularVenta('${esc(v.codigo)}')" style="color: #b3382c; font-size: .75rem; padding: 0; margin-top: 4px;">
+                                        ✕ Anular venta y devolver existencias
+                                    </button>
+                                ` : ''}
+                            </div>
+                            <div style="text-align: right;">
+                                <span class="amount">Bs ${fmt(v.total_bs)}</span>
+                                <small style="display: block; color: #376d5e;">Ganancia: Bs ${fmt(v.ganancia_bruta_bs)}</small>
+                            </div>
                         </div>
-                        <div style="text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
-                            <span class="amount" style="${v.anulada ? 'text-decoration: line-through; color: #888;' : ''}">Bs ${fmt(v.total_bs)}</span>
-                            ${!v.anulada ? `<small style="color: #376d5e;">Ganancia: Bs ${fmt(v.ganancia_bruta_bs)}</small>` : ''}
-                            ${!v.anulada ? `<button type="button" class="secondary" style="padding: 2px 8px; font-size: .72rem; color: #b91c1c; border-color: #fca5a5;" onclick="window.anularVenta('${esc(v.codigo)}')">Anular venta</button>` : ''}
-                        </div>
-                    </div>
-                `).join('');
+                    `).join('');
+                }
             }
 
         } catch (e) {
@@ -879,7 +1174,6 @@
     document.querySelectorAll('[data-period]').forEach(btn => {
         btn.onclick = () => {
             const p = btn.dataset.period;
-            // Obtener fecha actual en zona horaria de Caracas (America/Caracas - UTC-4)
             const caracasNow = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Caracas" }));
             const pad = n => String(n).padStart(2, '0');
             const toStr = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -893,7 +1187,6 @@
             } else if (p === 'today') {
                 $('from-date').value = today;
             } else if (p === 'week') {
-                // Filtro estricto de 7 días: hoy y los 6 días previos (exactamente 7 fechas en el rango)
                 const past = new Date(caracasNow);
                 past.setDate(past.getDate() - 6);
                 $('from-date').value = toStr(past);
@@ -970,7 +1263,7 @@
                     info(data.mensaje);
                     await Promise.all([
                         loadProducts(),
-                        loadEntries(),
+                        loadEntries(1),
                         loadLots(),
                         loadInventoryMetrics(),
                         loadReport()
@@ -1017,179 +1310,15 @@
     };
 
     // -------------------------------------------------------------------------
-    // 04 · CONTROL DE GASTOS Y RETIROS (TIENDA VS PERSONAL)
-    // -------------------------------------------------------------------------
-    async function loadExpenses() {
-        const from = $('from-date') ? $('from-date').value : '';
-        const to = $('to-date') ? $('to-date').value : '';
-        let url = '/api/gastos/?';
-        if (from) url += `desde=${encodeURIComponent(from)}&`;
-        if (to) url += `hasta=${encodeURIComponent(to)}`;
-
-        try {
-            const res = await fetch(url);
-            const data = await res.json();
-
-            if ($('expense-store-total')) $('expense-store-total').textContent = 'Bs ' + fmt(data.total_tienda_bs);
-            if ($('expense-owner-total')) $('expense-owner-total').textContent = 'Bs ' + fmt(data.total_personal_bs);
-            if ($('expense-total-metric')) $('expense-total-metric').textContent = 'Bs ' + fmt(data.total_general_bs);
-            if ($('expense-count')) $('expense-count').textContent = data.num_gastos || 0;
-
-            const listEl = $('expense-list');
-            if (!listEl) return;
-
-            if (!data.gastos || !data.gastos.length) {
-                listEl.innerHTML = '<div class="empty">No hay gastos ni retiros registrados en este período.</div>';
-                return;
-            }
-
-            listEl.innerHTML = data.gastos.map(g => {
-                const isPersonal = g.categoria === 'PERSONAL';
-                return `
-                    <div class="row">
-                        <div>
-                            <b>${esc(g.descripcion)}</b>
-                            <span class="pill ${isPersonal ? 'warn' : ''}" style="margin-left: 6px; font-size: .7rem; ${isPersonal ? 'background: #f3e8ff; color: #6b21a8;' : ''}">
-                                ${isPersonal ? 'Personal / Dueño' : 'Tienda / Operativo'}
-                            </span>
-                            <small>${esc(g.fecha)} · Pagado vía ${esc(g.metodo_label)}${g.comprobante ? ` (Ref: ${esc(g.comprobante)})` : ''}</small>
-                            ${g.observaciones ? `<small class="muted">${esc(g.observaciones)}</small>` : ''}
-                        </div>
-                        <div style="text-align: right; display: flex; align-items: center; gap: 10px;">
-                            <div>
-                                <span class="amount" style="color: #b3382c;">Bs ${fmt(g.monto_equivalente_bs)}</span>
-                                ${g.moneda !== 'BS' ? `<small class="muted" style="display:block;">${g.moneda} ${fmt(g.monto_original)}</small>` : ''}
-                            </div>
-                            <button type="button" class="link" data-delete-expense="${g.id}" style="color: #b3382c; font-size: .78rem;" title="Eliminar gasto">
-                                Borrar
-                            </button>
-                        </div>
-                    </div>
-                `;
-            }).join('');
-        } catch (e) {
-            console.error('Error cargando gastos:', e);
-        }
-    }
-
-    if ($('expense-currency')) {
-        $('expense-currency').onchange = () => {
-            const curr = $('expense-currency').value;
-            if (curr === 'USD') {
-                $('expense-rate').value = $('rate-usd').value;
-                $('expense-method').value = 'EFECTIVO_USD';
-            } else if (curr === 'USDT') {
-                $('expense-rate').value = $('rate-usdt').value;
-                $('expense-method').value = 'USDT';
-            } else {
-                $('expense-rate').value = '1.00';
-                $('expense-method').value = 'EFECTIVO_BS';
-            }
-        };
-    }
-
-    if ($('btn-save-expense')) {
-        $('btn-save-expense').onclick = async () => {
-            const desc = $('expense-desc').value.trim();
-            const cat = $('expense-cat').value;
-            const currency = $('expense-currency').value;
-            const amount = parseMoney($('expense-amount').value);
-            const method = $('expense-method').value;
-            const ref = $('expense-ref').value.trim();
-            const rate = parseMoney($('expense-rate').value) || 1.0;
-            const notes = $('expense-notes').value.trim();
-
-            if (!desc) {
-                info('Indica la descripción o motivo del gasto.', true);
-                $('expense-desc').focus();
-                return;
-            }
-
-            if (amount <= 0) {
-                info('El monto del gasto debe ser mayor a cero.', true);
-                $('expense-amount').focus();
-                return;
-            }
-
-            $('btn-save-expense').disabled = true;
-            $('btn-save-expense').textContent = 'Guardando egreso...';
-
-            try {
-                const res = await fetch('/api/gastos/', {
-                    method: 'POST',
-                    headers: getHeaders(),
-                    body: JSON.stringify({
-                        descripcion: desc,
-                        categoria: cat,
-                        moneda: currency,
-                        monto: amount,
-                        metodo: method,
-                        tasa: rate,
-                        comprobante: ref,
-                        observaciones: notes
-                    })
-                });
-                const data = await res.json();
-                if (res.ok) {
-                    info(data.mensaje);
-                    $('expense-desc').value = '';
-                    $('expense-amount').value = '';
-                    $('expense-ref').value = '';
-                    $('expense-notes').value = '';
-                    await loadExpenses();
-                    await loadReport();
-                } else {
-                    info(data.error || 'Error al guardar el gasto.', true);
-                }
-            } catch (e) {
-                console.error('Error al registrar gasto:', e);
-                info('Error de red al intentar registrar el gasto.', true);
-            } finally {
-                $('btn-save-expense').disabled = false;
-                $('btn-save-expense').textContent = 'Registrar gasto / salida';
-            }
-        };
-    }
-
-    if ($('expense-list')) {
-        $('expense-list').onclick = async e => {
-            const delBtn = e.target.closest('[data-delete-expense]');
-            if (delBtn) {
-                const id = Number(delBtn.dataset.deleteExpense);
-                if (!confirm('¿Estás seguro de eliminar este registro de gasto?')) return;
-
-                try {
-                    const res = await fetch(`/api/gastos/${id}/eliminar/`, {
-                        method: 'POST',
-                        headers: getHeaders()
-                    });
-                    const data = await res.json();
-                    if (res.ok) {
-                        info(data.mensaje);
-                        await loadExpenses();
-                        await loadReport();
-                    } else {
-                        info(data.error || 'No se pudo eliminar el gasto.', true);
-                    }
-                } catch (err) {
-                    console.error('Error al eliminar gasto:', err);
-                    info('Error de red al eliminar el gasto.', true);
-                }
-            }
-        };
-    }
-
-    // -------------------------------------------------------------------------
-    // INICIALIZACIÓN ULTRA RÁPIDA EN PARALELO
+    // INICIALIZACIÓN EN PARALELO
     // -------------------------------------------------------------------------
     Promise.all([
         loadRates(),
         loadProducts(),
-        loadEntries(),
+        loadEntries(1),
         loadLots(),
         loadInventoryMetrics(),
         loadExpenses()
     ]).catch(err => console.error('Error inicializando:', err));
 
 })();
-

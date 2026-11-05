@@ -11,12 +11,11 @@ from inventario.models import EntradaMercancia
 def _listar_productos(request):
     """
     Consulta y serializa los productos optimizado en 1 SOLA CONSULTA SQL
-    eliminando por completo el problema N+1 (de 4.003 queries a 1).
+    eliminando por completo el problema N+1.
     """
     q = request.GET.get('q', '').strip()
     solo_activos = request.GET.get('activos', 'true').lower() in ('true', '1')
 
-    # Subqueries optimizadas para obtener el último precio y costo en la misma consulta
     ultimas_entradas = EntradaMercancia.objects.filter(producto=OuterRef('pk')).order_by('-fecha_entrada', '-id')
     sub_precio = Subquery(ultimas_entradas.values('precio_venta')[:1], output_field=DecimalField())
     sub_costo = Subquery(ultimas_entradas.values('costo_unitario')[:1], output_field=DecimalField())
@@ -28,7 +27,6 @@ def _listar_productos(request):
     if q:
         productos_qs = productos_qs.filter(nombre_busqueda__icontains=normalizar_texto(q))
 
-    # Anotación agregada: suma de existencias activas y último precio/costo en 1 solo viaje a la BD
     productos = productos_qs.annotate(
         stock_disp=Coalesce(
             Sum('entradas__cantidad_disponible', filter=Q(entradas__cantidad_disponible__gt=0)),
@@ -94,8 +92,30 @@ def _eliminar_producto_total(prod_id):
 def _guardar_producto(payload):
     nombre = payload.get('nombre', '').strip()
     stock_minimo = int(payload.get('stock_minimo', 3))
+    confirmar_coincidencia = payload.get('confirmar_coincidencia', False)
+
     if not nombre:
         return JsonResponse({'error': 'El nombre del producto es obligatorio.'}, status=400)
+
+    nombre_norm = normalizar_texto(nombre)
+
+    # Advertencia ante nombres similares ignorando mayúsculas y acentos
+    coincidencias = list(
+        Producto.objects.filter(nombre_busqueda=nombre_norm).values('id', 'nombre', 'activo')
+    )
+    if not coincidencias and len(nombre_norm) >= 4:
+        coincidencias = list(
+            Producto.objects.filter(nombre_busqueda__icontains=nombre_norm).exclude(nombre=nombre)[:3].values('id', 'nombre', 'activo')
+        )
+
+    if coincidencias and not confirmar_coincidencia:
+        nombres_similares = [c['nombre'] for c in coincidencias]
+        if nombre not in nombres_similares:
+            return JsonResponse({
+                'advertencia_coincidencia': True,
+                'coincidencias': nombres_similares,
+                'mensaje': f'Ya existe en catálogo un producto con nombre similar: "{", ".join(nombres_similares)}". Confirma si se trata de un tono, marca o presentación diferente.'
+            })
 
     producto, created = Producto.objects.get_or_create(
         nombre=nombre,

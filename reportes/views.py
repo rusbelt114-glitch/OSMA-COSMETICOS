@@ -42,7 +42,7 @@ def api_reporte_resumen(request):
         medios_str = " + ".join(p.get_metodo_display() for p in v.pagos.all())
         ventas_data.append({
             'codigo': v.codigo,
-            'fecha': timezone.localtime(v.fecha).strftime("%d/%m/%Y %H:%M"),
+            'fecha': timezone.localtime(v.fecha).strftime("%d/%m/%Y %I:%M %p"),
             'total_bs': float(v.total_bs),
             'costo_total_bs': float(v.costo_total_bs),
             'ganancia_bruta_bs': float(v.ganancia_bruta_bs),
@@ -57,8 +57,10 @@ def api_reporte_resumen(request):
         cobros_json.append({
             'metodo': c['metodo'],
             'moneda': c['moneda'],
-            'total_original': float(c['total_original']),
-            'total_bs': float(c['total_bs']),
+            'monto_recibido': float(c.get('monto_recibido') or c['total_neto_orig']),
+            'vuelto_entregado_bs': float(c.get('vuelto_entregado_bs') or 0),
+            'total_original': float(c['total_neto_orig']),
+            'total_bs': float(c['total_neto_bs']),
             'transacciones': c['cantidad_transacciones']
         })
 
@@ -69,7 +71,16 @@ def api_reporte_resumen(request):
         'total_gastos_tienda': float(resumen['total_gastos_tienda']),
         'total_gastos_personal': float(resumen['total_gastos_personal']),
         'total_gastos_general': float(resumen['total_gastos_general']),
-        'ganancia_neta_real': float(resumen['ganancia_neta_real']),
+        'resultado_despues_gastos': float(resumen['resultado_despues_gastos']),
+        'ganancia_neta_real': float(resumen['resultado_despues_gastos']),
+        'inventario_actual': {
+            'fecha_consulta': resumen['inventario_actual']['fecha_consulta'],
+            'total_productos_activos': resumen['inventario_actual']['total_productos_activos'],
+            'unidades_disponibles': resumen['inventario_actual']['unidades_disponibles'],
+            'inversion_existencias': float(resumen['inventario_actual']['inversion_existencias']),
+            'venta_potencial': float(resumen['inventario_actual']['venta_potencial']),
+            'nota': resumen['inventario_actual']['nota']
+        },
         'total_unidades_vendidas': resumen['total_unidades_vendidas'],
         'num_ventas': resumen['num_ventas'],
         'productos_vendidos': [{

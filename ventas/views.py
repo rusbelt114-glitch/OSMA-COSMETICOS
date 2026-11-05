@@ -17,7 +17,7 @@ def api_ventas(request):
         for v in ventas:
             data.append({
                 'codigo': v.codigo,
-                'fecha': timezone.localtime(v.fecha).strftime("%d/%m/%Y %H:%M"),
+                'fecha': timezone.localtime(v.fecha).strftime("%d/%m/%Y %I:%M %p"),
                 'total_bs': float(v.total_bs),
                 'costo_total_bs': float(v.costo_total_bs),
                 'ganancia_bruta_bs': float(v.ganancia_bruta_bs),

@@ -233,20 +233,22 @@ def registrar_venta_fifo(items_carrito, lista_pagos, tasa_usd_bcv, tasa_usdt, ob
             f"Faltan Bs {diferencia:.2f}."
         )
 
-    # Calcular y asignar vuelto/cambio si el cliente pagó de más
+    # Calcular y asignar vuelto/cambio si el cliente pagó de más en efectivo
     sobrante_por_asignar_bs = max(Decimal('0.00'), total_recibido_bs - total_venta_bs)
     vuelto_total_bs = sobrante_por_asignar_bs
 
-    # Distribuir el vuelto preferentemente en pagos en efectivo
     if sobrante_por_asignar_bs > Decimal('0.00'):
-        # Orden de preferencia para descontar vuelto: EFECTIVO_BS, EFECTIVO_USD, USDT, otros
-        orden_metodos = ['EFECTIVO_BS', 'EFECTIVO_USD', 'USDT', 'PAGO_MOVIL', 'PUNTO_VENTA']
-        pagos_ordenados = sorted(
-            pagos_preparados,
-            key=lambda x: orden_metodos.index(x['metodo']) if x['metodo'] in orden_metodos else 99
-        )
+        orden_metodos = ['EFECTIVO_BS', 'EFECTIVO_USD']
+        pagos_efectivo = [p for p in pagos_preparados if p['metodo'] in orden_metodos]
+        total_efectivo_bs = sum(p['monto_neto_bs'] for p in pagos_efectivo)
 
-        for p_item in pagos_ordenados:
+        if sobrante_por_asignar_bs > (total_efectivo_bs + Decimal('0.50')):
+            raise ValidationError(
+                "No se puede generar vuelto sobre pagos electrónicos (Punto de Venta, Pago Móvil o USDT). "
+                "El monto recibido en dichos medios debe ser exacto."
+            )
+
+        for p_item in pagos_efectivo:
             if sobrante_por_asignar_bs <= Decimal('0.00'):
                 break
             descuento_bs = min(p_item['monto_neto_bs'], sobrante_por_asignar_bs)
@@ -311,4 +313,3 @@ def anular_venta_fifo(identificador, motivo=""):
     venta.save()
 
     return venta
-

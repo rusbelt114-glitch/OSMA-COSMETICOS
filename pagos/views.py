@@ -16,7 +16,7 @@ from reportes.views import parse_fecha_filtro
 def api_gastos(request):
     """
     Lista y registra gastos operativos de la tienda o retiros personales del dueño.
-    Permite totalizar por categoría y calcular la ganancia neta real del negocio.
+    Permite totalizar por categoría y calcular la ganancia del negocio sin mezclar retiros.
     """
     if request.method == "GET":
         desde_str = request.GET.get('desde')
@@ -39,7 +39,7 @@ def api_gastos(request):
         for g in gastos_qs[:100]:
             data.append({
                 'id': g.id,
-                'fecha': timezone.localtime(g.fecha).strftime("%d/%m/%Y %H:%M"),
+                'fecha': timezone.localtime(g.fecha).strftime("%d/%m/%Y %I:%M %p"),
                 'descripcion': g.descripcion,
                 'categoria': g.categoria,
                 'categoria_label': g.get_categoria_display(),
@@ -64,6 +64,16 @@ def api_gastos(request):
     elif request.method == "POST":
         try:
             payload = json.loads(request.body)
+            idempotency_key = payload.get('idempotency_key') or payload.get('client_token')
+            if idempotency_key:
+                gasto_existente = Gasto.objects.filter(idempotency_key=idempotency_key).first()
+                if gasto_existente:
+                    return JsonResponse({
+                        'mensaje': f'Gasto "{gasto_existente.descripcion}" recuperado (idempotente).',
+                        'id': gasto_existente.id,
+                        'monto_bs': float(gasto_existente.monto_equivalente_bs)
+                    })
+
             descripcion = payload.get('descripcion', '').strip()
             categoria = payload.get('categoria', 'TIENDA').strip().upper()
             moneda = payload.get('moneda', 'BS').strip().upper()
@@ -92,6 +102,8 @@ def api_gastos(request):
                     tasa = Decimal(str(payload.get('tasa', tasa_def)))
                 except Exception:
                     tasa = tasa_def
+                if not tasa or tasa <= Decimal('0.00'):
+                    return JsonResponse({'error': 'La tasa USD/BCV debe ser estrictamente positiva.'}, status=400)
                 monto_bs = (monto_orig * tasa).quantize(Decimal('0.01'))
             elif moneda == 'USDT':
                 tasa_def = HistorialTasa.obtener_ultima_tasa('USDT')
@@ -99,6 +111,8 @@ def api_gastos(request):
                     tasa = Decimal(str(payload.get('tasa', tasa_def)))
                 except Exception:
                     tasa = tasa_def
+                if not tasa or tasa <= Decimal('0.00'):
+                    return JsonResponse({'error': 'La tasa USDT debe ser estrictamente positiva.'}, status=400)
                 monto_bs = (monto_orig * tasa).quantize(Decimal('0.01'))
             else:
                 moneda = 'BS'
@@ -114,6 +128,7 @@ def api_gastos(request):
                 monto_equivalente_bs=monto_bs,
                 metodo=metodo,
                 comprobante=comprobante,
+                idempotency_key=idempotency_key or None,
                 observaciones=observaciones
             )
 

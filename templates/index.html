@@ -80,51 +80,83 @@
             </div>
             <span class="muted">Ingreso al inventario</span>
         </div>
-        <div class="layout">
-            <div class="card">
-                <h3>¿Qué llegó hoy?</h3>
-                <p class="muted">Escribe un producto nuevo o busca uno ya guardado.</p>
-                <form id="entry-form" onsubmit="return false;" action="javascript:void(0);">
-                    {% csrf_token %}
-                    <div class="fields">
-                        <label class="full">
-                            Buscar producto guardado
-                            <input id="lookup" type="search" placeholder="Nombre, tono o presentación" autocomplete="off">
-                        </label>
-                        <div class="full actions" id="suggest"></div>
-                        <label class="full">
-                            Nombre y presentación
-                            <input id="name" required maxlength="120" placeholder="Ej. Corrector · tono 01">
-                        </label>
-                        <label>
-                            Cantidad de unidades
-                            <input id="quantity" type="number" min="1" max="10000" step="1" required placeholder="20">
-                        </label>
-                        <label>
-                            Avisar al quedar
-                            <input id="minimum" type="number" min="0" max="10000" step="1" value="3" required>
-                        </label>
-                        <label>
-                            Costo por unidad · Bs
-                            <input id="cost" inputmode="decimal" required placeholder="0,00">
-                        </label>
-                        <label>
-                            Precio de venta · Bs
-                            <input id="price" inputmode="decimal" required placeholder="0,00">
-                        </label>
-                    </div>
-                    <div style="margin-top: 14px; display: flex; gap: 8px;">
-                        <button type="button" class="primary" id="btn-save-entry">Guardar entrada</button>
-                        <button type="button" class="secondary" id="clear-selection" hidden>Producto nuevo</button>
-                    </div>
-                </form>
-            </div>
-            <div class="card">
-                <h3>Últimas entradas</h3>
-                <p class="muted">Cada entrada conserva su costo y precio histórico en la base de datos.</p>
-                <div id="recent-entries">
-                    <div class="empty">Cargando entradas...</div>
+        
+        <!-- Formulario de Entrada (Arriba) -->
+        <div class="card" style="margin-bottom: 20px;">
+            <h3>¿Qué llegó hoy?</h3>
+            <p class="muted">Escribe un producto nuevo o busca uno ya guardado.</p>
+            <form id="entry-form" onsubmit="return false;" action="javascript:void(0);">
+                {% csrf_token %}
+                <div class="fields">
+                    <label class="full">
+                        Buscar producto guardado
+                        <input id="lookup" type="search" placeholder="Nombre, tono o presentación" autocomplete="off">
+                    </label>
+                    <div class="full actions" id="suggest"></div>
+                    <label class="full">
+                        Nombre y presentación
+                        <input id="name" required maxlength="255" placeholder="Ej. Base Líquida Mate Tono 220 30ml">
+                    </label>
+                    <label>
+                        Cantidad de unidades
+                        <input id="quantity" type="number" min="1" max="10000" step="1" required placeholder="20">
+                    </label>
+                    <label>
+                        Avisar al quedar
+                        <input id="minimum" type="number" min="0" max="10000" step="1" value="3" required>
+                    </label>
+                    <label>
+                        Costo por unidad · Bs
+                        <input id="cost" inputmode="decimal" required placeholder="0,00">
+                    </label>
+                    <label>
+                        Precio de venta · Bs
+                        <input id="price" inputmode="decimal" required placeholder="0,00">
+                    </label>
                 </div>
+                <div style="margin-top: 14px; display: flex; gap: 8px;">
+                    <button type="button" class="primary" id="btn-save-entry">Guardar entrada</button>
+                    <button type="button" class="secondary" id="clear-selection" hidden>Producto nuevo</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Historial y Movimientos Recientes (Debajo con Filtros y Paginación) -->
+        <div class="card">
+            <div style="display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px; margin-bottom: 12px;">
+                <div>
+                    <h3 style="margin: 0;">Historial y Movimientos de Mercancía</h3>
+                    <p class="muted" style="margin: 4px 0 0 0;">Últimas 10 por página · Horario de Caracas (12h)</p>
+                </div>
+            </div>
+
+            <!-- Barra de búsqueda y filtros de fecha -->
+            <div class="entry-history-toolbar">
+                <input id="entry-search" type="search" placeholder="🔍 Buscar por nombre de producto..." style="flex: 1; min-width: 180px;">
+                <select id="entry-date-filter">
+                    <option value="all">Todas las entradas</option>
+                    <option value="hoy">Hoy</option>
+                    <option value="dia">Día específico</option>
+                    <option value="mes">Mes</option>
+                    <option value="rango">Rango de fechas</option>
+                </select>
+                <input type="date" id="entry-date-single" style="display: none;">
+                <input type="month" id="entry-date-month" style="display: none;">
+                <input type="date" id="entry-date-from" placeholder="Desde" style="display: none;">
+                <input type="date" id="entry-date-to" placeholder="Hasta" style="display: none;">
+                <button type="button" class="secondary" id="btn-filter-entries">Filtrar</button>
+                <button type="button" class="secondary" id="btn-reset-entries">Limpiar</button>
+            </div>
+
+            <div id="recent-entries">
+                <div class="empty">Cargando entradas...</div>
+            </div>
+
+            <!-- Paginación -->
+            <div class="pagination-bar" id="entry-pagination" style="display: none;">
+                <button type="button" class="secondary" id="btn-entry-prev" disabled>← Anterior</button>
+                <span id="entry-page-info" style="font-size: 0.88rem; font-weight: 600;">Página 1 de 1</span>
+                <button type="button" class="secondary" id="btn-entry-next" disabled>Siguiente →</button>
             </div>
         </div>
     </section>
@@ -182,8 +214,40 @@
                     <label>Tasa USD · Bs/USD<input id="rate-usd" inputmode="decimal" value="{{ tasa_usd_bcv|floatformat:2 }}"></label>
                     <label>Tasa USDT · Bs/USDT<input id="rate-usdt" inputmode="decimal" value="{{ tasa_usdt|floatformat:2 }}"></label>
                 </div>
-                <p class="muted" id="conversion" style="min-height: 1.4em; font-weight: 600;"></p>
-                <button type="button" id="finish" class="primary" style="width: 100%; margin-top: 10px;">Confirmar y registrar venta</button>
+
+                <!-- Desglose en vivo de Cobro Mixto y Saldo Pendiente Dual -->
+                <div id="payment-breakdown" style="background: #fbfbf9; border: 1px solid #e0dfdb; padding: 14px; margin-top: 12px; border-radius: 8px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                        <span>Total de la venta en bolívares:</span>
+                        <strong id="live-sale-total">Bs 0,00</strong>
+                    </div>
+                    <div id="live-received-breakdown" style="font-size: 0.85rem; color: #555; margin-bottom: 8px; line-height: 1.4;">
+                        <!-- Detalle recibido por cada medio y su moneda original -->
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px; font-weight: 600;">
+                        <span>Total recibido equivalente:</span>
+                        <span id="live-total-received">Bs 0,00</span>
+                    </div>
+                    <div id="live-pending-box" style="margin-top: 8px; padding: 10px; border-radius: 6px; background: #fff5f5; border: 1px solid #ffd0d0;">
+                        <div id="live-pending-text" style="font-weight: 700; color: #b3382c; font-size: 0.95rem;">
+                            Pendiente: Bs 0,00, equivalentes a USD 0,00
+                        </div>
+                        <small style="display: block; color: #777; margin-top: 5px; font-size: 0.78rem;">
+                            💡 Es una misma deuda expresada en dos monedas (Bs y USD a tasa oficial BCV aplicada a esta venta). No deben sumarse ambas cantidades.
+                        </small>
+                    </div>
+                    <div id="live-surplus-box" style="margin-top: 8px; padding: 10px; border-radius: 6px; background: #eef7f4; border: 1px solid #c2e2d8; display: none;">
+                        <div style="font-weight: 700; color: #376d5e; font-size: 0.95rem;" id="live-surplus-text">
+                            Cambio / Vuelto a entregar en efectivo: Bs 0,00
+                        </div>
+                        <small style="display: block; color: #44685d; margin-top: 4px; font-size: 0.8rem;" id="live-surplus-detail">
+                            Monto recibido: Bs 0,00 · Vuelto entregado: Bs 0,00 · Cobro neto: Bs 0,00
+                        </small>
+                    </div>
+                </div>
+
+                <p class="muted" id="conversion" style="min-height: 1.4em; font-weight: 600; display: none;"></p>
+                <button type="button" id="finish" class="primary" style="width: 100%; margin-top: 12px;">Confirmar y registrar venta</button>
             </div>
         </div>
     </section>
@@ -329,6 +393,7 @@
                 <button type="button" class="button secondary" id="btn-restore-tab4" title="Restaurar inventario desde archivo .json o .xlsx">↻ Restaurar desde archivo</button>
             </div>
         </div>
+
         <div class="card">
             <div class="title" style="margin:0">
                 <div>
@@ -349,29 +414,81 @@
             </div>
             <p class="muted" id="period-info" style="margin-top: 8px;"></p>
         </div>
-        <div class="metrics" style="margin-top:14px">
-            <div class="metric">
-                <small>Ventas totales</small>
-                <strong id="sales-value">Bs 0,00</strong>
-                <small><span id="sold-count">0</span> unidades vendidas</small>
-            </div>
-            <div class="metric">
-                <small>Ganancia bruta (FIFO)</small>
-                <strong id="profit-value">Bs 0,00</strong>
-                <small>Ventas menos costo de mercancía</small>
-            </div>
-            <div class="metric">
-                <small>Gastos tienda + retiros</small>
-                <strong id="expenses-report-value" style="color: #b3382c;">Bs 0,00</strong>
-                <small>Tienda: <span id="exp-store-sub">Bs 0,00</span> · Personal: <span id="exp-pers-sub">Bs 0,00</span></small>
-            </div>
-            <div class="metric">
-                <small>Ganancia neta real (Bolsillo)</small>
-                <strong id="net-profit-value" style="color: #376d5e;">Bs 0,00</strong>
-                <small>Ganancia bruta menos todos los gastos</small>
+
+        <!-- A · Resumen financiero del período seleccionado -->
+        <div class="card" style="margin-top: 14px;">
+            <h3>A · Resumen Financiero del Período Seleccionado</h3>
+            <p class="muted">Cálculo contable exacto sobre las ventas y gastos del período filtrado.</p>
+            <div class="metrics" style="margin-top: 10px;">
+                <div class="metric">
+                    <small>Ventas Totales</small>
+                    <strong id="sales-value">Bs 0,00</strong>
+                    <small><span id="sold-count">0</span> unidades vendidas</small>
+                </div>
+                <div class="metric">
+                    <small>Costo de lo Vendido (FIFO)</small>
+                    <strong id="cost-value" style="color: #666;">Bs 0,00</strong>
+                    <small>Costo histórico de mercancía vendida</small>
+                </div>
+                <div class="metric">
+                    <small>Ganancia Bruta</small>
+                    <strong id="profit-value" style="color: #376d5e;">Bs 0,00</strong>
+                    <small>Ventas − Costo de lo vendido</small>
+                </div>
+                <div class="metric">
+                    <small>Gastos Operativos (Tienda)</small>
+                    <strong id="expenses-store-metric" style="color: #b3382c;">Bs 0,00</strong>
+                    <small>Alquiler, bolsas, luz, servicios</small>
+                </div>
+                <div class="metric">
+                    <small>Resultado después de Gastos</small>
+                    <strong id="net-profit-value" style="color: #1a4d40;">Bs 0,00</strong>
+                    <small>Ganancia bruta − Gastos operativos</small>
+                </div>
+                <div class="metric">
+                    <small>Retiros Personales (Dueño)</small>
+                    <strong id="expenses-personal-metric" style="color: #8c52ff;">Bs 0,00</strong>
+                    <small>Informados por separado (no restan ganancia)</small>
+                </div>
             </div>
         </div>
-        <div class="layout">
+
+        <!-- B · Estado del inventario actual a la fecha de consulta -->
+        <div class="card" style="margin-top: 14px; background: #fafaf8;">
+            <div style="display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px;">
+                <div>
+                    <h3 style="margin: 0;">B · Estado del Inventario Actual</h3>
+                    <span class="muted" id="inv-consult-date">Al corte del momento actual</span>
+                </div>
+            </div>
+            <div class="metrics" style="margin-top: 10px;">
+                <div class="metric">
+                    <small>Productos Activos</small>
+                    <strong id="inv-active-prods">0</strong>
+                    <small>Artículos en catálogo</small>
+                </div>
+                <div class="metric">
+                    <small>Unidades en Existencia</small>
+                    <strong id="inv-total-units">0</strong>
+                    <small>Stock total en almacén</small>
+                </div>
+                <div class="metric">
+                    <small>Inversión en Existencias</small>
+                    <strong id="inv-cost-value">Bs 0,00</strong>
+                    <small>Costo histórico de mercancía restante</small>
+                </div>
+                <div class="metric">
+                    <small>Venta Potencial</small>
+                    <strong id="inv-potential-sale" style="color: #2b5c4f;">Bs 0,00</strong>
+                    <small>Valor proyectado a precio de venta</small>
+                </div>
+            </div>
+            <p class="muted" style="margin-top: 10px; font-size: 0.8rem;">
+                💡 <b>Nota contable:</b> La venta potencial representa el valor de las existencias a sus precios de venta registrados; no es dinero cobrado ni ganancia realizada. La inversión en existencias representa el costo de la mercancía restante disponible.
+            </p>
+        </div>
+
+        <div class="layout" style="margin-top: 14px;">
             <div class="card">
                 <h3>Qué se vendió</h3>
                 <p class="muted">Unidades, ventas y ganancia bruta por producto.</p>
@@ -379,7 +496,7 @@
             </div>
             <div class="card">
                 <h3>Cobros por medio</h3>
-                <p class="muted">Ingresos recibidos en cada moneda y medio.</p>
+                <p class="muted">Ingresos recibidos en cada moneda y medio (recibido, vuelto y neto).</p>
                 <div id="payment-totals"></div>
             </div>
             <div class="card">
@@ -402,7 +519,6 @@
 </main>
 
 <script>
-    // Variables globales inyectadas desde Django (con comillas para evitar alertas del linter de VS Code)
     window.INITIAL_RATES = {
         usd_bcv: Number.parseFloat("{{ tasa_usd_bcv|stringformat:'.4f' }}") || 0,
         usdt: Number.parseFloat("{{ tasa_usdt|stringformat:'.4f' }}") || 0
@@ -412,4 +528,3 @@
 <script src="{% static 'js/osma.js' %}?v={% now 'U' %}"></script>
 </body>
 </html>
-
