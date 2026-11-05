@@ -19,6 +19,19 @@ DEBUG = os.getenv('DEBUG', 'True').lower() in ('true', '1', 'yes')
 
 ALLOWED_HOSTS = [host.strip() for host in os.getenv('ALLOWED_HOSTS', '*').split(',') if host.strip()]
 
+# Configuración de proxy y orígenes confiables para CSRF en Render / Producción
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+CSRF_TRUSTED_ORIGINS = [
+    'https://*.onrender.com',
+    'https://osma-cosmeticos.onrender.com',
+    'http://127.0.0.1',
+    'http://localhost',
+]
+extra_csrf = os.getenv('CSRF_TRUSTED_ORIGINS', '')
+if extra_csrf:
+    CSRF_TRUSTED_ORIGINS.extend([o.strip() for o in extra_csrf.split(',') if o.strip()])
+
 # SECURITY WARNING: keep the secret key used in production secret!
 def get_secret_key():
     secret_key = os.getenv('SECRET_KEY')

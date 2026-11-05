@@ -10,15 +10,24 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         self.stdout.write("Iniciando configuración base...")
+        
+        # 1. Crear / actualizar superusuario administrador de Django
+        admin_user, _ = User.objects.get_or_create(username="admin")
+        admin_user.set_password("admin1234")
+        admin_user.is_staff = True
+        admin_user.is_superuser = True
+        admin_user.is_active = True
+        admin_user.save()
+        self.stdout.write(self.style.SUCCESS("-> Superusuario Django asegurado: 'admin' (clave: 'admin1234')"))
+
+        # 2. Crear / actualizar usuario único de tienda
         username = "tienda"
-        password = os.getenv("TIENDA_PASSWORD", "osma1234")
+        password = os.getenv("TIENDA_PASSWORD", "1234")
         user, created = User.objects.get_or_create(username=username)
-        if created:
-            user.set_password(password)
-            user.save()
-            self.stdout.write(self.style.SUCCESS(f"-> Usuario único de tienda creado: '{username}' (clave: '{password}')"))
-        else:
-            self.stdout.write(f"-> Usuario de tienda '{username}' ya existe.")
+        user.set_password(password)
+        user.is_active = True
+        user.save()
+        self.stdout.write(self.style.SUCCESS(f"-> Usuario único de tienda asegurado: '{username}' (clave: '{password}')"))
 
         self.stdout.write("-> Sincronizando tasas oficiales...")
         res = sincronizar_tasas_en_linea()
