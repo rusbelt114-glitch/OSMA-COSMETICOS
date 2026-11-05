@@ -10,7 +10,7 @@ from tasas.views import api_tasas, api_actualizar_tasas
 from pagos.views import api_gastos, api_eliminar_gasto
 from reportes.views import (
     api_reporte_resumen, descargar_excel_reporte, descargar_copia_seguridad, 
-    api_restaurar_copia
+    api_restaurar_copia, api_reiniciar_sistema
 )
 
 urlpatterns = [
@@ -28,6 +28,8 @@ urlpatterns = [
     path('api/entradas/', api_entradas, name='api_entradas'),
     path('api/entradas/<int:entrada_id>/eliminar/', api_eliminar_entrada, name='api_eliminar_entrada'),
     path('api/lotes/disponibles/', api_lotes_disponibles, name='api_lotes_disponibles'),
+    path('api/inventario/lotes/', api_lotes_disponibles, name='api_inventario_lotes'),
+    path('api/sistema/reiniciar/', api_reiniciar_sistema, name='api_reiniciar_sistema'),
     path('api/inventario/metricas/', api_metricas_inventario, name='api_metricas_inventario'),
     path('api/ventas/', api_ventas, name='api_ventas'),
     path('api/ventas/<str:codigo>/anular/', api_anular_venta, name='api_anular_venta'),

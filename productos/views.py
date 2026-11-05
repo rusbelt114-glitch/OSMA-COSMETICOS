@@ -62,13 +62,8 @@ def _listar_productos(request):
 
 def _retirar_producto(prod_id):
     producto = Producto.objects.get(id=prod_id)
-    if producto.stock_total > 0:
-        return JsonResponse(
-            {'error': 'Para retirar este producto del catálogo, primero debe quedar en 0 unidades.'},
-            status=400
-        )
     producto.activo = False
-    producto.save()
+    producto.save(update_fields=['activo'])
     return JsonResponse({'mensaje': f'Producto "{producto.nombre}" retirado del catálogo activo.'})
 
 def _reactivar_producto(prod_id):
@@ -77,17 +72,24 @@ def _reactivar_producto(prod_id):
     producto.save()
     return JsonResponse({'mensaje': f'Producto "{producto.nombre}" reactivado en el catálogo.'})
 
-def _eliminar_producto_total(prod_id):
+def _eliminar_producto_total(prod_id, forzar=False):
     producto = Producto.objects.get(id=prod_id)
-    if producto.ventas_detalle.exists():
-        return JsonResponse(
-            {'error': f'"{producto.nombre}" ya tiene ventas registradas en el historial. Puedes retirarlo del catálogo pero no borrarlo para proteger las auditorías.'},
-            status=400
-        )
-    nombre = producto.nombre
+    tiene_ventas = producto.ventas_detalle.exists()
+    if tiene_ventas and not forzar:
+        return JsonResponse({
+            'error': f'"{producto.nombre}" ya tiene ventas registradas en el historial.',
+            'puede_forzar': True,
+            'mensaje': f'"{producto.nombre}" ya tiene ventas registradas. ¿Deseas forzar su eliminación eliminando también sus ventas y existencias de prueba?'
+        }, status=400)
+    
+    # Si se fuerza o no tiene ventas:
+    for item in producto.ventas_detalle.all():
+        item.desgloses_fifo.all().delete()
+        item.delete()
     producto.entradas.all().delete()
+    nombre = producto.nombre
     producto.delete()
-    return JsonResponse({'mensaje': f'Producto "{nombre}" eliminado por completo del sistema.'})
+    return JsonResponse({'mensaje': f'Producto "{nombre}" y sus registros asociados fueron eliminados correctamente.'})
 
 def _guardar_producto(payload):
     nombre = payload.get('nombre', '').strip()
@@ -143,11 +145,12 @@ def api_productos(request):
         payload = json.loads(request.body)
         accion = payload.get('accion')
         prod_id = payload.get('producto_id')
+        forzar = payload.get('forzar', False)
 
         acciones = {
             'retirar': lambda: _retirar_producto(prod_id),
             'reactivar': lambda: _reactivar_producto(prod_id),
-            'eliminar_total': lambda: _eliminar_producto_total(prod_id),
+            'eliminar_total': lambda: _eliminar_producto_total(prod_id, forzar=forzar),
         }
 
         manejador = acciones.get(accion)

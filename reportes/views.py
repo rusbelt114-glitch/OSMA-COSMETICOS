@@ -419,3 +419,51 @@ def api_restaurar_copia(request):
             'error': 'Formato no admitido. Selecciona un archivo de copia de seguridad .json o un reporte .xlsx.'
         }, status=400)
 
+
+
+@login_required
+@require_http_methods(["POST"])
+def api_reiniciar_sistema(request):
+    """
+    Permite limpiar datos de prueba y empezar de 0 de forma segura.
+    Opciones:
+    - 'solo_ventas_gastos': Elimina ventas, cobros y gastos de prueba, restituyendo el stock original de las entradas.
+    - 'todo_a_cero': Elimina todas las ventas, cobros, gastos, entradas y productos para iniciar el inventario 100% limpio.
+    """
+    try:
+        import json
+        from ventas.models import Venta, ItemVenta, DesgloseVentaFIFO
+        from pagos.models import PagoVenta, Gasto
+        from inventario.models import EntradaMercancia
+        from productos.models import Producto
+
+        data = json.loads(request.body) if request.body else {}
+        modo = data.get('modo', 'todo_a_cero')
+
+        # Eliminar siempre movimientos de prueba
+        DesgloseVentaFIFO.objects.all().delete()
+        ItemVenta.objects.all().delete()
+        PagoVenta.objects.all().delete()
+        Venta.objects.all().delete()
+        Gasto.objects.all().delete()
+
+        if modo == 'solo_ventas_gastos':
+            for e in EntradaMercancia.objects.all():
+                e.cantidad_disponible = e.cantidad_recibida
+                e.save(update_fields=['cantidad_disponible'])
+            return JsonResponse({
+                'ok': True,
+                'mensaje': 'Se limpiaron todas las ventas y gastos de prueba. El catálogo y las existencias originales fueron restituidos.'
+            })
+
+        elif modo == 'todo_a_cero':
+            EntradaMercancia.objects.all().delete()
+            Producto.objects.all().delete()
+            return JsonResponse({
+                'ok': True,
+                'mensaje': 'Sistema reiniciado con éxito. Todos los productos, entradas, ventas y gastos de prueba fueron eliminados. La base de datos está en 0.'
+            })
+
+        return JsonResponse({'error': 'Modo de reinicio no válido.'}, status=400)
+    except Exception as e:
+        return JsonResponse({'error': f'Error al reiniciar: {str(e)}'}, status=500)

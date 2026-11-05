@@ -510,6 +510,27 @@
                 <div id="sales-log"></div>
             </div>
         </div>
+
+        <!-- C · Gestión de Datos y Reinicio (Empezar de Cero) -->
+        <div class="card" style="margin-top: 14px; border: 1px dashed #d97736; background: #fffaf5;">
+            <div style="display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px;">
+                <div>
+                    <h3 style="margin: 0; color: #b3382c;">⚙️ Preparación y Limpieza de Datos (Empezar de 0)</h3>
+                    <span class="muted">Herramientas para limpiar pruebas y entregar el sistema 100% listo al negocio.</span>
+                </div>
+            </div>
+            <p style="margin-top: 10px; font-size: 0.88rem; color: #555;">
+                Si realizaste pruebas con ventas, gastos o productos ficticios, utiliza estas opciones para dejar la base de datos limpia:
+            </p>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px;">
+                <button type="button" class="secondary" id="btn-reset-sales-only" style="border-color: #8c52ff; color: #6a2cd8;">
+                    🧹 Limpiar solo ventas y gastos (Restaurar existencias)
+                </button>
+                <button type="button" class="secondary" id="btn-reset-all-zero" style="border-color: #b3382c; color: #b3382c;">
+                    ⚠️ Empezar de 0 (Borrar todos los productos y ventas de prueba)
+                </button>
+            </div>
+        </div>
     </section>
 
     <footer class="foot">

@@ -81,6 +81,8 @@
                 const el = $(id);
                 if (el) el.hidden = (id !== tab);
             });
+            if (tab === 'entry') void loadRecentEntries();
+            if (tab === 'sell') void loadLots();
             if (tab === 'stock') void loadInventoryMetrics();
             if (tab === 'expenses') void loadExpenses();
             if (tab === 'refill') void loadReport();
@@ -451,7 +453,10 @@
     // -------------------------------------------------------------------------
     async function loadLots() {
         try {
-            const res = await fetch('/api/inventario/lotes/');
+            let res = await fetch('/api/lotes/disponibles/');
+            if (!res.ok) {
+                res = await fetch('/api/inventario/lotes/');
+            }
             const data = await res.json();
             availableLots = data.lotes || [];
             renderSellProductChoices();
@@ -825,7 +830,15 @@
                     </div>
                     <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end;">
                         <span class="pill ${isLow ? 'warn' : ''}">${estadoTexto}</span>
-                        <button type="button" class="link" data-delete-prod="${p.id}" style="color: #b3382c; font-size: .78rem;" title="Eliminar producto y sus entradas">
+                        ${p.activo ? 
+                            `<button type="button" class="link" data-retire-prod="${p.id}" style="color: #6a2cd8; font-size: .78rem;" title="Retirar del catálogo activo">
+                                Archivar
+                            </button>` : 
+                            `<button type="button" class="link" data-reactivate-prod="${p.id}" style="color: #2b5c4f; font-size: .78rem;" title="Reactivar en catálogo activo">
+                                Reactivar
+                            </button>`
+                        }
+                        <button type="button" class="link" data-delete-prod="${p.id}" style="color: #b3382c; font-size: .78rem;" title="Eliminar producto y sus existencias">
                             Borrar
                         </button>
                     </div>
@@ -837,6 +850,48 @@
     $('stock-search').oninput = renderStockList;
 
     $('stock-list').onclick = async e => {
+        const retBtn = e.target.closest('[data-retire-prod]');
+        if (retBtn) {
+            const id = Number(retBtn.dataset.retireProd);
+            const p = allProducts.find(x => x.id === id);
+            if (!p || !confirm(`¿Deseas archivar "${p.nombre}" para retirarlo del catálogo activo?`)) return;
+            try {
+                const res = await fetch('/api/productos/', {
+                    method: 'POST',
+                    headers: getHeaders(),
+                    body: JSON.stringify({ accion: 'retirar', producto_id: id })
+                });
+                const data = await res.json();
+                info(data.mensaje || data.error);
+                await loadProducts();
+                await loadLots();
+                await loadInventoryMetrics();
+            } catch (err) {
+                console.error('Error al archivar producto:', err);
+            }
+            return;
+        }
+
+        const reactBtn = e.target.closest('[data-reactivate-prod]');
+        if (reactBtn) {
+            const id = Number(reactBtn.dataset.reactivateProd);
+            try {
+                const res = await fetch('/api/productos/', {
+                    method: 'POST',
+                    headers: getHeaders(),
+                    body: JSON.stringify({ accion: 'reactivar', producto_id: id })
+                });
+                const data = await res.json();
+                info(data.mensaje || data.error);
+                await loadProducts();
+                await loadLots();
+                await loadInventoryMetrics();
+            } catch (err) {
+                console.error('Error al reactivar producto:', err);
+            }
+            return;
+        }
+
         const delBtn = e.target.closest('[data-delete-prod]');
         if (delBtn) {
             const id = Number(delBtn.dataset.deleteProd);
@@ -856,7 +911,26 @@
                     info(data.mensaje);
                     await loadProducts();
                     await loadEntries(1);
+                    await loadLots();
                     await loadInventoryMetrics();
+                } else if (data.puede_forzar) {
+                    if (confirm(`${data.mensaje || data.error}\n\n¿Deseas forzar la eliminación de este producto y limpiar sus registros de prueba asociados?`)) {
+                        const res2 = await fetch('/api/productos/', {
+                            method: 'POST',
+                            headers: getHeaders(),
+                            body: JSON.stringify({ accion: 'eliminar_total', producto_id: id, forzar: true })
+                        });
+                        const data2 = await res2.json();
+                        if (res2.ok) {
+                            info(data2.mensaje);
+                            await loadProducts();
+                            await loadEntries(1);
+                            await loadLots();
+                            await loadInventoryMetrics();
+                        } else {
+                            info(data2.error || 'No se pudo forzar la eliminación.', true);
+                        }
+                    }
                 } else {
                     info(data.error || 'No se pudo eliminar el producto.', true);
                 }
@@ -1321,4 +1395,65 @@
         loadExpenses()
     ]).catch(err => console.error('Error inicializando:', err));
 
+})
+    // -------------------------------------------------------------------------
+    // 06 · REINICIO DE DATOS Y LIMPIEZA DE PRUEBAS
+    // -------------------------------------------------------------------------
+    if ($('btn-reset-sales-only')) {
+        $('btn-reset-sales-only').onclick = async () => {
+            if (!confirm('¿Estás seguro de limpiar todas las ventas y gastos de prueba?\n\nEsta acción restaurará el stock de tus entradas al 100% de lo recibido y dejará las ventas en 0.')) return;
+            try {
+                const res = await fetch('/api/sistema/reiniciar/', {
+                    method: 'POST',
+                    headers: getHeaders(),
+                    body: JSON.stringify({ modo: 'solo_ventas_gastos' })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    info(data.mensaje);
+                    await loadProducts();
+                    await loadEntries(1);
+                    await loadLots();
+                    await loadExpenses();
+                    await loadInventoryMetrics();
+                    await loadReport();
+                } else {
+                    info(data.error || 'Error al reiniciar ventas.', true);
+                }
+            } catch (e) {
+                console.error(e);
+            }
+        };
+    }
+
+    if ($('btn-reset-all-zero')) {
+        $('btn-reset-all-zero').onclick = async () => {
+            const resp = prompt('⚠️ ATENCIÓN: Esta opción eliminará TODOS los productos, entradas, ventas y gastos para empezar de 0.\n\nEscribe "BORRAR TODO" para confirmar:');
+            if (resp !== 'BORRAR TODO') {
+                if (resp !== null) alert('Confirmación incorrecta. No se realizaron cambios.');
+                return;
+            }
+            try {
+                const res = await fetch('/api/sistema/reiniciar/', {
+                    method: 'POST',
+                    headers: getHeaders(),
+                    body: JSON.stringify({ modo: 'todo_a_cero' })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    info(data.mensaje);
+                    await loadProducts();
+                    await loadEntries(1);
+                    await loadLots();
+                    await loadExpenses();
+                    await loadInventoryMetrics();
+                    await loadReport();
+                } else {
+                    info(data.error || 'Error al reiniciar todo.', true);
+                }
+            } catch (e) {
+                console.error(e);
+            }
+        };
+    }
 })();
