@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Acceso · Osma Cosmetics</title>
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'css/osma.css' %}">
+</head>
+<body>
+    <div class="login-wrapper">
+        <div class="login-card">
+            <div class="logo" aria-label="Osma Cosmetics">
+                <b>OSMA</b>
+                <small>COSMETICS</small>
+            </div>
+            <div class="eyebrow" style="margin-bottom: 6px;">Punto de Venta e Inventario</div>
+            <h2 style="margin: 0 0 18px; font-family: Georgia, serif; font-size: 1.6rem;">Acceso Tienda</h2>
+            <p class="muted" style="margin-bottom: 22px;">Introduce la clave compartida del equipo para iniciar el turno.</p>
+
+            {% if error or form.errors %}
+            <div class="notice error" style="margin-bottom: 15px;">
+                Clave incorrecta. Inténtalo de nuevo.
+            </div>
+            {% endif %}
+
+            <form method="post" action="{% url 'login' %}">
+                {% csrf_token %}
+                <div style="margin-bottom: 18px; text-align: left;">
+                    <label for="id_password">Clave de la tienda</label>
+                    <div style="position: relative; display: flex; align-items: center;">
+                        <input type="password" name="password" id="id_password" required autofocus placeholder="••••••••" style="text-align: center; font-size: 1.2rem; letter-spacing: 2px; padding-right: 46px;">
+                        <button type="button" id="toggle-pwd" style="position: absolute; right: 12px; background: none; border: none; padding: 4px; color: #676a63; display: flex; align-items: center; justify-content: center; cursor: pointer;" title="Ver u ocultar contraseña">
+                            <svg id="eye-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                <circle cx="12" cy="12" r="3"></circle>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                <button type="submit" id="btn-submit" class="primary" style="width: 100%; padding: 13px; font-size: 1rem;">
+                    Abrir sistema
+                </button>
+            </form>
+            <p class="muted" style="margin-top: 24px; font-size: .75rem;">
+                Sesión compartida protegida · Osma Cosmetics
+            </p>
+        </div>
+    </div>
+
+    <script>
+        const pwdInput = document.getElementById('id_password');
+        const toggleBtn = document.getElementById('toggle-pwd');
+        const eyeIcon = document.getElementById('eye-icon');
+        const submitBtn = document.getElementById('btn-submit');
+        const form = document.querySelector('form');
+
+        form.addEventListener('submit', () => {
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Entrando al sistema...';
+        });
+
+        toggleBtn.addEventListener('click', () => {
+            if (pwdInput.type === 'password') {
+                pwdInput.type = 'text';
+                eyeIcon.innerHTML = '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line>';
+            } else {
+                pwdInput.type = 'password';
+                eyeIcon.innerHTML = '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle>';
+            }
+            pwdInput.focus();
+        });
+    </script>
+</body>
+</html>

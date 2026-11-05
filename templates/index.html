@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f2f1ec">
+    <title>Osma Cosmetics · Sistema de Tienda</title>
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'css/osma.css' %}">
+</head>
+<body>
+<main class="app">
+    <header>
+        <div class="logo" aria-label="Osma Cosmetics">
+            <b>OSMA</b>
+            <small>COSMETICS</small>
+        </div>
+        <div class="headnote">
+            <span class="fixed-badge">Sistema Central Conectado</span>
+            <p>Gestión de Tienda · Base de Datos Central</p>
+            <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 5px; flex-wrap: wrap; align-items: center;">
+                <input type="file" id="global-restore-file" accept=".json,.xlsx" style="display: none;">
+                <button type="button" class="button secondary" id="btn-restore-header" style="padding: 6px 12px; font-size: .82rem;" title="Restaurar base de datos o inventario desde un archivo de respaldo o Excel">
+                    ↻ Restaurar copia
+                </button>
+                <a href="{% url 'descargar_copia_seguridad' %}" class="button" style="padding: 6px 14px; font-size: .82rem; font-weight: 600; background: #376d5e; color: #ffffff; border: none; border-radius: 8px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.12);" title="Descargar copia de seguridad completa (.json)">
+                    💾 Copia de seguridad
+                </a>
+                <a href="{% url 'logout' %}" class="button secondary" style="padding: 6px 12px; font-size: .82rem;">Bloquear / Salir</a>
+            </div>
+        </div>
+    </header>
+
+    <!-- Barra de tasas en vivo (BCV + USDT) -->
+    <div class="live-rates-bar" id="rates-bar">
+        <div class="live-rates-items">
+            <span>Tasa BCV Oficial: <b id="bar-usd-rate">Bs {{ tasa_usd_bcv|floatformat:2 }}</b></span>
+            <span>Tasa USDT: <b id="bar-usdt-rate">Bs {{ tasa_usdt|floatformat:2 }}</b></span>
+            <small class="muted" id="rates-updated-text">Actualizado automáticamente</small>
+        </div>
+        <button type="button" class="secondary" id="btn-sync-rates" style="padding: 5px 12px; font-size: .78rem;">
+            ⟳ Actualizar tasas BCV
+        </button>
+    </div>
+
+    <section class="hero">
+        <div class="hero-copy">
+            <div class="eyebrow">Osma Cosmetics · Tienda</div>
+            <h1>Todo en su lugar.</h1>
+            <p>Registra lo que llega, lo que se vende y lo que falta reponer con cálculo FIFO y ganancia real.</p>
+        </div>
+        <div class="art" aria-hidden="true">
+            <svg viewBox="0 0 180 180" fill="none">
+                <circle cx="90" cy="91" r="67" fill="#DCEAE0"/>
+                <circle cx="90" cy="91" r="58" stroke="#ADCFC2"/>
+                <rect x="47" y="87" width="50" height="47" rx="12" fill="#D8BCA2"/>
+                <rect x="53" y="78" width="38" height="12" rx="4" fill="#6D6D60"/>
+                <path d="M112 91V54C112 42 120 34 126 27C132 34 140 42 140 54V91" fill="#AA8178"/>
+                <rect x="108" y="91" width="36" height="44" rx="5" fill="#424641"/>
+                <path d="M65 109H79" stroke="#FAF8EE" stroke-width="3" stroke-linecap="round"/>
+                <path d="M128 50V75" stroke="#E5C4B8" stroke-width="3" stroke-linecap="round"/>
+            </svg>
+        </div>
+    </section>
+
+    <div class="nav" role="tablist" aria-label="Secciones de trabajo">
+        <button type="button" role="tab" data-tab="entry" aria-selected="true"><span class="icon">＋</span>Entrada</button>
+        <button type="button" role="tab" data-tab="sell" aria-selected="false"><span class="icon">↗</span>Venta</button>
+        <button type="button" role="tab" data-tab="stock" aria-selected="false"><span class="icon">▦</span>Inventario</button>
+        <button type="button" role="tab" data-tab="refill" aria-selected="false"><span class="icon">◌</span>Análisis</button>
+    </div>
+
+    <output id="notice" class="notice"></output>
+
+    <!-- 01 · ENTRADA DE PRODUCTOS -->
+    <section id="entry">
+        <div class="title">
+            <div>
+                <div class="eyebrow">01 · mercancía</div>
+                <h2>Registrar entrada</h2>
+            </div>
+            <span class="muted">Ingreso al inventario</span>
+        </div>
+        <div class="layout">
+            <div class="card">
+                <h3>¿Qué llegó hoy?</h3>
+                <p class="muted">Escribe un producto nuevo o busca uno ya guardado.</p>
+                <form id="entry-form" onsubmit="return false;" action="javascript:void(0);">
+                    {% csrf_token %}
+                    <div class="fields">
+                        <label class="full">
+                            Buscar producto guardado
+                            <input id="lookup" type="search" placeholder="Nombre, tono o presentación" autocomplete="off">
+                        </label>
+                        <div class="full actions" id="suggest"></div>
+                        <label class="full">
+                            Nombre y presentación
+                            <input id="name" required maxlength="120" placeholder="Ej. Corrector · tono 01">
+                        </label>
+                        <label>
+                            Cantidad de unidades
+                            <input id="quantity" type="number" min="1" max="10000" step="1" required placeholder="20">
+                        </label>
+                        <label>
+                            Avisar al quedar
+                            <input id="minimum" type="number" min="0" max="10000" step="1" value="3" required>
+                        </label>
+                        <label>
+                            Costo por unidad · Bs
+                            <input id="cost" inputmode="decimal" required placeholder="0,00">
+                        </label>
+                        <label>
+                            Precio de venta · Bs
+                            <input id="price" inputmode="decimal" required placeholder="0,00">
+                        </label>
+                    </div>
+                    <div style="margin-top: 14px; display: flex; gap: 8px;">
+                        <button type="button" class="primary" id="btn-save-entry">Guardar entrada</button>
+                        <button type="button" class="secondary" id="clear-selection" hidden>Producto nuevo</button>
+                    </div>
+                </form>
+            </div>
+            <div class="card">
+                <h3>Últimas entradas</h3>
+                <p class="muted">Cada entrada conserva su costo y precio histórico en la base de datos.</p>
+                <div id="recent-entries">
+                    <div class="empty">Cargando entradas...</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 02 · REGISTRO DE VENTAS (FIFO) -->
+    <section id="sell" hidden>
+        <div class="title">
+            <div>
+                <div class="eyebrow">02 · atención</div>
+                <h2>Registrar venta</h2>
+            </div>
+            <span class="muted">Deducción automática por FIFO</span>
+        </div>
+        <div class="layout">
+            <div class="card">
+                <h3>Agregar productos</h3>
+                <label>
+                    Buscar por nombre o tono
+                    <input id="sell-search" placeholder="Buscar corrector, labial, etc." type="search">
+                </label>
+                <label>
+                    Producto y lote disponible
+                    <select id="sell-product-select"></select>
+                </label>
+                <div class="fields">
+                    <label>
+                        Cantidad
+                        <input id="units" type="number" min="1" max="10000" value="1">
+                    </label>
+                    <label>
+                        Precio venta (Bs)
+                        <input id="sell-unit-price" inputmode="decimal" placeholder="0,00">
+                    </label>
+                </div>
+                <button type="button" class="primary" id="add-cart" style="margin-top: 10px;">Agregar a la venta</button>
+                <p class="muted" style="margin-top: 12px; font-size: .8rem;">
+                    💡 <b>Flexibilidad:</b> Selecciona el lote viejo o nuevo según lo que vayas a entregar. El precio de venta es editable si el dueño decide vender los viejos a precio nuevo.
+                </p>
+            </div>
+            <div class="card">
+                <h3>Venta actual</h3>
+                <div id="cart"></div>
+                <div class="row">
+                    <b>Total a pagar</b>
+                    <span class="amount" id="sale-total" style="font-size: 1.4rem;">Bs 0,00</span>
+                </div>
+                <h3>Pago compartido multi-moneda</h3>
+                <p class="muted">Combina los medios que use la cliente. Tasa congelada en esta venta.</p>
+                <div class="fields">
+                    <label>Efectivo · Bs<input id="pay-bs" inputmode="decimal" value="0" placeholder="0,00"></label>
+                    <label>Pago móvil · Bs<input id="pay-mobile" inputmode="decimal" value="0" placeholder="0,00"></label>
+                    <label>Efectivo · USD<input id="pay-usd" inputmode="decimal" value="0" placeholder="0,00"></label>
+                    <label>USDT<input id="pay-usdt" inputmode="decimal" value="0" placeholder="0,00"></label>
+                    <label>Tasa USD · Bs/USD<input id="rate-usd" inputmode="decimal" value="{{ tasa_usd_bcv|floatformat:2 }}"></label>
+                    <label>Tasa USDT · Bs/USDT<input id="rate-usdt" inputmode="decimal" value="{{ tasa_usdt|floatformat:2 }}"></label>
+                </div>
+                <p class="muted" id="conversion" style="min-height: 1.4em; font-weight: 600;"></p>
+                <button type="button" id="finish" class="primary" style="width: 100%; margin-top: 10px;">Confirmar y registrar venta</button>
+            </div>
+        </div>
+    </section>
+
+    <!-- 03 · INVENTARIO Y EXISTENCIAS -->
+    <section id="stock" hidden>
+        <div class="title">
+            <div>
+                <div class="eyebrow">03 · existencias</div>
+                <h2>Inventario</h2>
+            </div>
+            <a href="{% url 'descargar_excel_reporte' %}" class="button secondary" id="download-stock-excel">↓ Descargar Excel</a>
+        </div>
+        <div class="metrics">
+            <div class="metric">
+                <small>Productos registrados</small>
+                <strong id="product-count">0</strong>
+            </div>
+            <div class="metric">
+                <small>Unidades disponibles</small>
+                <strong id="stock-count">0</strong>
+            </div>
+            <div class="metric">
+                <small>Valor de venta disponible</small>
+                <strong id="stock-value">Bs 0,00</strong>
+            </div>
+        </div>
+        <div class="card">
+            <label>
+                Buscar en inventario
+                <input id="stock-search" type="search" placeholder="Nombre, marca o tono">
+            </label>
+            <div id="stock-list">
+                <div class="empty">Cargando inventario...</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- 04 · ANÁLISIS, ALERTAS Y REPORTES -->
+    <section id="refill" hidden>
+        <div class="title">
+            <div>
+                <div class="eyebrow">04 · seguimiento</div>
+                <h2>Alertas y análisis</h2>
+            </div>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                <a href="{% url 'descargar_copia_seguridad' %}" class="button secondary" title="Descargar base de datos completa en JSON">💾 Copia de seguridad</a>
+                <a href="{% url 'descargar_excel_reporte' %}" class="button secondary" id="download-report-excel">↓ Descargar Excel</a>
+                <button type="button" class="button secondary" id="btn-restore-tab4" title="Restaurar inventario desde archivo .json o .xlsx">↻ Restaurar desde archivo</button>
+            </div>
+        </div>
+        <div class="card">
+            <div class="title" style="margin:0">
+                <div>
+                    <h3>Consulta por período</h3>
+                    <span class="muted">Las fechas incluyen ambos días.</span>
+                </div>
+            </div>
+            <div class="fields" style="margin-top: 10px;">
+                <label>Desde<input type="date" id="from-date"></label>
+                <label>Hasta<input type="date" id="to-date"></label>
+            </div>
+            <div class="actions" style="margin-top: 10px;">
+                <button type="button" class="secondary" data-period="all">Todo</button>
+                <button type="button" class="secondary" data-period="today">Hoy</button>
+                <button type="button" class="secondary" data-period="week">Últimos 7 días</button>
+                <button type="button" class="secondary" data-period="half">Quincena calendario</button>
+                <button type="button" class="secondary" data-period="month">Mes</button>
+            </div>
+            <p class="muted" id="period-info" style="margin-top: 8px;"></p>
+        </div>
+        <div class="metrics" style="margin-top:14px">
+            <div class="metric">
+                <small>Unidades vendidas</small>
+                <strong id="sold-count">0</strong>
+            </div>
+            <div class="metric">
+                <small>Ventas del período</small>
+                <strong id="sales-value">Bs 0,00</strong>
+            </div>
+            <div class="metric">
+                <small>Ganancia bruta</small>
+                <strong id="profit-value">Bs 0,00</strong>
+                <small>Ventas menos costo de lo vendido (FIFO)</small>
+            </div>
+        </div>
+        <div class="layout">
+            <div class="card">
+                <h3>Qué se vendió</h3>
+                <p class="muted">Unidades, ventas y ganancia bruta por producto.</p>
+                <div id="sold-products"></div>
+            </div>
+            <div class="card">
+                <h3>Cobros por medio</h3>
+                <p class="muted">Ingresos recibidos en cada moneda y medio.</p>
+                <div id="payment-totals"></div>
+            </div>
+            <div class="card">
+                <h3>Productos por reponer</h3>
+                <p class="muted">Existencia actual según el mínimo de alerta indicado.</p>
+                <div id="short-list"></div>
+            </div>
+            <div class="card">
+                <h3>Detalle de ventas</h3>
+                <p class="muted">Historial de tickets emitidos con sus medios de pago.</p>
+                <div id="sales-log"></div>
+            </div>
+        </div>
+    </section>
+
+    <footer class="foot">
+        <span>Osma Cosmetics · Versión operativa centralizada con PostgreSQL / Django</span>
+        <span class="muted">Caja compartida para tienda</span>
+    </footer>
+</main>
+
+<script>
+    // Variables globales inyectadas desde Django (con comillas para evitar alertas del linter de VS Code)
+    window.INITIAL_RATES = {
+        usd_bcv: Number.parseFloat("{{ tasa_usd_bcv|stringformat:'.4f' }}") || 0,
+        usdt: Number.parseFloat("{{ tasa_usdt|stringformat:'.4f' }}") || 0
+    };
+    window.CSRF_TOKEN = "{{ csrf_token }}";
+</script>
+<script src="{% static 'js/osma.js' %}?v={% now 'U' %}"></script>
+</body>
+</html>
+
