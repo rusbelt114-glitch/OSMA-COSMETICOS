@@ -27,6 +27,7 @@
     let recentEntries = [];
     let availableLots = [];
     let cart = [];
+    let currentSaleToken = null; // Token de idempotencia persistente por intento de venta
     let selectedProductId = null;
 
     // Mensaje de notificación
@@ -443,6 +444,7 @@
                 precio_unitario_bs: unitPrice
             });
         }
+        currentSaleToken = null;
         info(`Agregado a la venta: ${lote.producto_nombre} a Bs ${fmt(unitPrice)}.`);
         return true;
     }
@@ -471,6 +473,7 @@
                 precio_unitario_bs: unitPrice
             });
         }
+        currentSaleToken = null;
         info(`Agregado a la venta: ${prod.nombre} a Bs ${fmt(unitPrice)}.`);
         return true;
     }
@@ -540,6 +543,7 @@
         if (!btn) return;
         const idx = Number(btn.dataset.removeCart);
         cart.splice(idx, 1);
+        currentSaleToken = null;
         renderCart();
     };
 
@@ -617,7 +621,15 @@
         $('finish').textContent = 'Registrando venta...';
 
         try {
-            const clientToken = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : ('IDEM-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9));
+            // Conservar el mismo token de venta mientras no se modifique el carrito
+            // para garantizar idempotencia exacta en reintentos o fallos de red
+            if (!currentSaleToken) {
+                currentSaleToken = (window.crypto && crypto.randomUUID) 
+                    ? crypto.randomUUID() 
+                    : ('IDEM-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9));
+            }
+            const clientToken = currentSaleToken;
+
             const res = await fetch('/api/ventas/', {
                 method: 'POST',
                 headers: getHeaders(),
@@ -640,6 +652,7 @@
             } else {
                 info(data.mensaje);
                 cart = [];
+                currentSaleToken = null; // Liberar token tras confirmación exitosa
                 renderCart();
                 ['pay-bs', 'pay-mobile', 'pay-usd', 'pay-usdt'].forEach(id => { $(id).value = '0'; });
                 updatePaymentCalculations();

@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from django.db import transaction
 from django.core.exceptions import ValidationError
 from django.utils import timezone
@@ -20,13 +20,54 @@ def registrar_venta_fifo(items_carrito, lista_pagos, tasa_usd_bcv, tasa_usdt, ob
         if venta_existente:
             return venta_existente
 
+    # 1. Validaciones estrictas de tasas de cambio
+    try:
+        tasa_usd_bcv = Decimal(str(tasa_usd_bcv))
+        tasa_usdt = Decimal(str(tasa_usdt))
+    except (ValueError, TypeError, InvalidOperation):
+        raise ValidationError("Las tasas de cambio deben ser valores numéricos válidos.")
+
+    if tasa_usd_bcv <= Decimal('0.00'):
+        raise ValidationError("La tasa USD BCV debe ser estrictamente mayor a cero.")
+    if tasa_usdt <= Decimal('0.00'):
+        raise ValidationError("La tasa USDT debe ser estrictamente mayor a cero.")
+
+    # 2. Validaciones de artículos en el carrito
     if not items_carrito:
         raise ValidationError("El carrito de venta no puede estar vacío.")
 
-    tasa_usd_bcv = Decimal(str(tasa_usd_bcv))
-    tasa_usdt = Decimal(str(tasa_usdt))
+    for item in items_carrito:
+        try:
+            cant = int(item.get('cantidad', 0))
+        except (ValueError, TypeError):
+            raise ValidationError("La cantidad del producto debe ser un número entero.")
+        if cant <= 0:
+            raise ValidationError("La cantidad solicitada debe ser estrictamente mayor a cero.")
 
-    # 1. Crear el encabezado de la venta preliminar
+        try:
+            precio = Decimal(str(item.get('precio_unitario_bs', 0)))
+        except (ValueError, TypeError, InvalidOperation):
+            raise ValidationError("El precio unitario debe ser un valor numérico válido.")
+        if precio <= Decimal('0.00'):
+            raise ValidationError("El precio unitario debe ser estrictamente mayor a cero.")
+
+    # 3. Validaciones estrictas de métodos de pago y montos
+    if not lista_pagos:
+        raise ValidationError("Debe ingresar al menos un medio de pago.")
+
+    metodos_validos = set(dict(PagoVenta.METODO_CHOICES).keys())
+    for p in lista_pagos:
+        metodo = p.get('metodo')
+        if metodo not in metodos_validos:
+            raise ValidationError(f"Método de pago '{metodo}' no es válido o no está permitido.")
+        try:
+            monto = Decimal(str(p.get('monto_original', 0)))
+        except (ValueError, TypeError, InvalidOperation):
+            raise ValidationError(f"El monto del pago para {metodo} debe ser un valor numérico válido.")
+        if monto <= Decimal('0.00'):
+            raise ValidationError(f"El monto a pagar para {metodo} debe ser estrictamente mayor a cero.")
+
+    # 4. Crear el encabezado de la venta preliminar
     venta = Venta(
         fecha=timezone.now(),
         tasa_usd_bcv=tasa_usd_bcv,
@@ -163,10 +204,12 @@ def registrar_venta_fifo(items_carrito, lista_pagos, tasa_usd_bcv, tasa_usdt, ob
             moneda = 'USDT'
             tasa = tasa_usdt
             equiv_bs = (monto_ingresado * tasa).quantize(Decimal('0.01'))
-        else: # EFECTIVO_BS o PAGO_MOVIL
+        elif metodo in ('EFECTIVO_BS', 'PAGO_MOVIL'):
             moneda = 'BS'
             tasa = Decimal('1.0000')
             equiv_bs = monto_ingresado
+        else:
+            raise ValidationError(f"Método de pago no reconocido: {metodo}")
 
         pagos_preparados.append({
             'metodo': metodo,
@@ -262,17 +305,10 @@ def anular_venta_fifo(identificador, motivo=""):
     if venta.anulada:
         raise ValidationError(f"La venta {venta.codigo} ya fue anulada previamente.")
 
-    # Reintegrar existencias a cada lote por el desglose original de la venta
-    for detalle in venta.detalles.select_related('producto').all():
-        for desglose in detalle.desgloses_lote.select_related('entrada').all():
-            entrada = EntradaMercancia.objects.select_for_update().get(id=desglose.entrada_id)
-            entrada.cantidad_disponible += desglose.cantidad_descontada
-            entrada.save(update_fields=['cantidad_disponible'])
-
     venta.anulada = True
     venta.motivo_anulacion = motivo or "Anulación de venta y reversión de inventario"
     venta.anulada_el = timezone.now()
-    venta.save(update_fields=['anulada', 'motivo_anulacion', 'anulada_el'])
+    venta.save()
 
     return venta
 

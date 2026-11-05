@@ -24,3 +24,4 @@ media/
 staticfiles/
 .DS_Store
 Thumbs.db
+prueba_estres_k6.js

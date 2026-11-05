@@ -14,8 +14,11 @@ except ImportError:
 from django.core.management.utils import get_random_secret_key
 from django.core.exceptions import ImproperlyConfigured
 
+from urllib.parse import urlparse, unquote, parse_qs
+
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv('DEBUG', 'True').lower() in ('true', '1', 'yes')
+# Por defecto False para máxima seguridad (salvo que DEBUG=True esté explícito en .env local)
+DEBUG = os.getenv('DEBUG', 'False').lower() in ('true', '1', 'yes')
 
 ALLOWED_HOSTS = [host.strip() for host in os.getenv('ALLOWED_HOSTS', '*').split(',') if host.strip()]
 
@@ -45,8 +48,6 @@ def get_secret_key():
     secret_key = os.getenv('SECRET_KEY')
     if secret_key:
         return secret_key
-    if not DEBUG:
-        raise ImproperlyConfigured("La variable de entorno SECRET_KEY es obligatoria en entornos de producción.")
     
     secret_file = BASE_DIR / '.secret_key'
     if secret_file.exists():
@@ -129,27 +130,48 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
-# Seleccionar PostgreSQL únicamente si está explícitamente configurado DB_ENGINE=django.db.backends.postgresql
-# o DATABASE_URL en el entorno (ej: Render/producción). De lo contrario, usar SQLite local persistente.
-db_engine = os.getenv('DB_ENGINE', '')
-if os.getenv('DB_NAME') and (db_engine == 'django.db.backends.postgresql' or os.getenv('DATABASE_URL') or os.getenv('RENDER')):
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.postgresql',
-            'NAME': os.getenv('DB_NAME'),
-            'USER': os.getenv('DB_USER', 'postgres'),
-            'PASSWORD': os.getenv('DB_PASSWORD', ''),
-            'HOST': os.getenv('DB_HOST', 'localhost'),
-            'PORT': os.getenv('DB_PORT', '5432'),
-        }
-    }
-else:
-    DATABASES = {
+def _configurar_base_datos():
+    database_url = os.getenv('DATABASE_URL', '').strip()
+    if database_url:
+        parsed = urlparse(database_url)
+        if parsed.scheme in ('postgres', 'postgresql', 'pgsql'):
+            db_config = {
+                'ENGINE': 'django.db.backends.postgresql',
+                'NAME': unquote(parsed.path.lstrip('/')),
+                'USER': unquote(parsed.username or 'postgres'),
+                'PASSWORD': unquote(parsed.password or ''),
+                'HOST': parsed.hostname or 'localhost',
+                'PORT': str(parsed.port or '5432'),
+            }
+            if parsed.query:
+                query_params = parse_qs(parsed.query)
+                options = {k: v[0] for k, v in query_params.items()}
+                if options:
+                    db_config['OPTIONS'] = options
+            return {'default': db_config}
+
+    if os.getenv('DB_NAME'):
+        db_engine = os.getenv('DB_ENGINE', '')
+        if db_engine == 'django.db.backends.postgresql' or os.getenv('RENDER'):
+            return {
+                'default': {
+                    'ENGINE': 'django.db.backends.postgresql',
+                    'NAME': os.getenv('DB_NAME'),
+                    'USER': os.getenv('DB_USER', 'postgres'),
+                    'PASSWORD': os.getenv('DB_PASSWORD', ''),
+                    'HOST': os.getenv('DB_HOST', 'localhost'),
+                    'PORT': os.getenv('DB_PORT', '5432'),
+                }
+            }
+
+    return {
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
             'NAME': BASE_DIR / 'db.sqlite3',
         }
     }
+
+DATABASES = _configurar_base_datos()
 
 
 # Password validation

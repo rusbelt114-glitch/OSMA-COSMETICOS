@@ -208,8 +208,10 @@ def _restaurar_desde_json(archivo):
 
 def _procesar_hoja_entradas(ws):
     """
-    Procesa la hoja de entradas con prevención estricta de duplicados.
-    Si una entrada ya existe, actualiza sus saldos en vez de duplicarla.
+    Procesa la hoja de entradas reconociendo la identidad única de cada lote.
+    Lotes distintos del mismo producto (ej: 5 y 7 unidades) se registran de forma
+    independiente sumando al stock total (12 unidades).
+    Solo actualiza si la fila indica un ID de lote ya existente en el sistema.
     """
     prods, entradas = 0, 0
     for row in ws.iter_rows(min_row=2, values_only=True):
@@ -235,23 +237,20 @@ def _procesar_hoja_entradas(ws):
         if created:
             prods += 1
 
-        # Comprobar si ya existe una entrada idéntica para evitar duplicación
+        # Identidad estricta por ID de Entrada si está presente en la columna 0
         entrada_existente = None
         if row[0] and str(row[0]).isdigit():
             entrada_existente = EntradaMercancia.objects.filter(id=int(row[0]), producto=prod).first()
 
-        if not entrada_existente:
-            entrada_existente = EntradaMercancia.objects.filter(
-                producto=prod,
-                costo_unitario=costo_unit,
-                precio_venta=precio_venta,
-                observaciones=obs
-            ).first()
-
         if entrada_existente:
+            # Solo actualizar el lote específico si existe en el sistema
+            entrada_existente.cantidad_recibida = cant_recibida
             entrada_existente.cantidad_disponible = cant_disponible
-            entrada_existente.save(update_fields=['cantidad_disponible'])
+            entrada_existente.costo_unitario = costo_unit
+            entrada_existente.precio_venta = precio_venta
+            entrada_existente.save()
         else:
+            # Nuevo lote independiente (conserva lotes múltiples: 5 + 7 = 12)
             EntradaMercancia.objects.create(
                 producto=prod,
                 cantidad_recibida=cant_recibida,
@@ -266,8 +265,10 @@ def _procesar_hoja_entradas(ws):
 
 def _procesar_hoja_inventario(ws):
     """
-    Procesa catálogo general respetando ceros (sin inflar existencias)
-    y evitando duplicaciones en re-importaciones.
+    Procesa catálogo general respetando ceros y protegiendo el stock vivo:
+    - Si el producto ya tiene historial de ventas o entradas, NO sobreescribe sus
+      existencias con saldos antiguos de un Excel viejo (evita reponer mercancía vendida).
+    - Si es un producto nuevo sin entradas previas, crea su lote inicial.
     """
     prods, entradas = 0, 0
     for row in ws.iter_rows(min_row=2, values_only=True):
@@ -309,26 +310,18 @@ def _procesar_hoja_inventario(ws):
         if created:
             prods += 1
 
-        # Respetar unidades: si el archivo marca stock > 0
-        if stock > 0:
-            # Buscar si el producto ya tiene un lote activo para actualizarlo en vez de duplicarlo
-            lote_existente = EntradaMercancia.objects.filter(producto=prod, cantidad_disponible__gt=0).first()
-            if lote_existente:
-                lote_existente.cantidad_disponible = stock
-                if costo > 0:
-                    lote_existente.costo_unitario = costo
-                if precio > 0:
-                    lote_existente.precio_venta = precio
-                lote_existente.save()
-            else:
-                EntradaMercancia.objects.create(
-                    producto=prod,
-                    cantidad_recibida=stock,
-                    cantidad_disponible=stock,
-                    costo_unitario=costo,
-                    precio_venta=precio,
-                    observaciones="Importado desde catálogo Excel"
-                )
+        # Protección de existencias vivas:
+        # Si el producto ya tiene entradas registradas, NO pisar sus existencias con el Excel viejo
+        tiene_entradas_previas = EntradaMercancia.objects.filter(producto=prod).exists()
+        if not tiene_entradas_previas and stock > 0:
+            EntradaMercancia.objects.create(
+                producto=prod,
+                cantidad_recibida=stock,
+                cantidad_disponible=stock,
+                costo_unitario=costo,
+                precio_venta=precio,
+                observaciones="Carga inicial desde catálogo Excel"
+            )
             entradas += 1
     return prods, entradas
 
@@ -336,10 +329,25 @@ def _procesar_hoja_inventario(ws):
 def _restaurar_desde_excel(archivo):
     """
     Carga y procesa productos y entradas desde un reporte o catálogo Excel
-    con transacción atómica: o se cargan todos correctamente o nada.
+    con transacción atómica y control de re-importación accidental del mismo archivo.
     """
+    import hashlib
     from django.db import transaction
     try:
+        # Leer y verificar hash del archivo para evitar importarlo dos veces por accidente
+        contenido = archivo.read()
+        archivo.seek(0)
+        file_hash = hashlib.sha256(contenido).hexdigest()
+
+        hash_file = settings.BASE_DIR / 'backups' / '.imported_excel_hashes'
+        hash_file.parent.mkdir(parents=True, exist_ok=True)
+        hashes_previos = set(hash_file.read_text(encoding='utf-8').splitlines()) if hash_file.exists() else set()
+
+        if file_hash in hashes_previos:
+            return JsonResponse({
+                'error': f'El archivo "{archivo.name}" ya fue procesado anteriormente. Para evitar duplicaciones accidentales, no se permite volver a importar el mismo archivo exacto.'
+            }, status=400)
+
         wb = openpyxl.load_workbook(archivo, data_only=True)
         with transaction.atomic():
             if "Entradas de Mercancía" in wb.sheetnames:
@@ -350,9 +358,13 @@ def _restaurar_desde_excel(archivo):
             else:
                 return JsonResponse({'error': 'El archivo Excel no tiene hojas de inventario reconocibles.'}, status=400)
 
+        # Registrar hash para proteger contra reenvíos accidentales
+        with open(hash_file, 'a', encoding='utf-8') as hf:
+            hf.write(file_hash + '\n')
+
         return JsonResponse({
             'exito': True,
-            'mensaje': f'¡Excel "{archivo.name}" procesado con éxito! Se verificaron {prods} productos y {entradas} saldos de existencias sin duplicados.'
+            'mensaje': f'¡Excel "{archivo.name}" procesado con éxito! Se verificaron {prods} productos y se registraron {entradas} lotes correctamente.'
         })
     except Exception as e:
         return JsonResponse({'error': f'Error al leer archivo Excel: {str(e)}'}, status=400)

@@ -1,6 +1,7 @@
 import json
 from decimal import Decimal
 from django.http import JsonResponse
+from django.core.exceptions import ValidationError
 from django.views.decorators.http import require_http_methods
 from django.contrib.auth.decorators import login_required
 from .models import Venta
@@ -74,6 +75,9 @@ def api_ventas(request):
                 'vuelto_total_bs': float(venta.vuelto_total_bs),
                 'ganancia_bruta_bs': float(venta.ganancia_bruta_bs)
             })
+        except ValidationError as ve:
+            msg = ve.message if hasattr(ve, 'message') else str(ve)
+            return JsonResponse({'error': msg}, status=400)
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=400)
 
@@ -93,5 +97,8 @@ def api_anular_venta(request, codigo):
             'mensaje': f'Venta {venta.codigo} anulada exitosamente. Las existencias han sido reintegradas al inventario.',
             'codigo': venta.codigo
         })
+    except ValidationError as ve:
+        msg = ve.message if hasattr(ve, 'message') else str(ve)
+        return JsonResponse({'error': msg}, status=400)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=400)

@@ -9,4 +9,6 @@ services:
         value: 3.12.0
       - key: DEBUG
         value: "False"
+      - key: SECRET_KEY
+        generateValue: true
 

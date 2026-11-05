@@ -1,5 +1,6 @@
 from django.db import models, transaction
 from django.utils import timezone
+from django.core.exceptions import ValidationError
 from decimal import Decimal
 import uuid
 
@@ -38,6 +39,28 @@ class Venta(models.Model):
             timestamp = timezone.now().strftime('%Y%m%d%H%M')
             unique_part = uuid.uuid4().hex[:4].upper()
             self.codigo = f"V-{timestamp}-{unique_part}"
+
+        # Integridad: Impedir reactivación de una venta ya anulada
+        if self.pk and not self.anulada:
+            ya_anulada = Venta.objects.filter(pk=self.pk, anulada=True).exists()
+            if ya_anulada:
+                raise ValidationError("No se puede reactivar una venta que ya ha sido anulada.")
+
+        # Reversión automática de inventario a lotes si se anula (desde Django Admin, API o Shell)
+        if self.pk and self.anulada:
+            estaba_activa = Venta.objects.filter(pk=self.pk, anulada=False).exists()
+            if estaba_activa:
+                with transaction.atomic():
+                    for detalle in self.detalles.select_related('producto').all():
+                        for desglose in detalle.desgloses_lote.select_related('entrada').all():
+                            entrada = desglose.entrada
+                            entrada.cantidad_disponible += desglose.cantidad_descontada
+                            entrada.save(update_fields=['cantidad_disponible'])
+                    if not self.anulada_el:
+                        self.anulada_el = timezone.now()
+                    if not self.motivo_anulacion:
+                        self.motivo_anulacion = "Anulación directa de venta"
+
         super().save(*args, **kwargs)
 
     def __str__(self):
