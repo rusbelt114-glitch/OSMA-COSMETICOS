@@ -40,6 +40,8 @@ def api_entradas(request):
                 return JsonResponse({'error': 'La cantidad debe ser mayor a 0 y menor a 10.000.'}, status=400)
             if costo < 0 or precio <= 0:
                 return JsonResponse({'error': 'El costo no puede ser negativo y el precio debe ser mayor a 0.'}, status=400)
+            if precio < costo and not payload.get('permitir_perdida', False):
+                return JsonResponse({'error': f'El precio de venta (Bs {precio:.2f}) es menor al costo unitario (Bs {costo:.2f}). Corrige el precio antes de guardar.'}, status=400)
 
             if prod_id:
                 producto = Producto.objects.get(id=prod_id)

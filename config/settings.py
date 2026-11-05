@@ -32,6 +32,14 @@ extra_csrf = os.getenv('CSRF_TRUSTED_ORIGINS', '')
 if extra_csrf:
     CSRF_TRUSTED_ORIGINS.extend([o.strip() for o in extra_csrf.split(',') if o.strip()])
 
+# Blindaje de seguridad en producción
+if not DEBUG:
+    CSRF_COOKIE_SECURE = True
+    SESSION_COOKIE_SECURE = True
+    SECURE_BROWSER_XSS_FILTER = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    X_FRAME_OPTIONS = 'DENY'
+
 # SECURITY WARNING: keep the secret key used in production secret!
 def get_secret_key():
     secret_key = os.getenv('SECRET_KEY')
@@ -121,10 +129,13 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
-if os.getenv('DB_NAME'):
+# Seleccionar PostgreSQL únicamente si está explícitamente configurado DB_ENGINE=django.db.backends.postgresql
+# o DATABASE_URL en el entorno (ej: Render/producción). De lo contrario, usar SQLite local persistente.
+db_engine = os.getenv('DB_ENGINE', '')
+if os.getenv('DB_NAME') and (db_engine == 'django.db.backends.postgresql' or os.getenv('DATABASE_URL') or os.getenv('RENDER')):
     DATABASES = {
         'default': {
-            'ENGINE': os.getenv('DB_ENGINE', 'django.db.backends.postgresql'),
+            'ENGINE': 'django.db.backends.postgresql',
             'NAME': os.getenv('DB_NAME'),
             'USER': os.getenv('DB_USER', 'postgres'),
             'PASSWORD': os.getenv('DB_PASSWORD', ''),

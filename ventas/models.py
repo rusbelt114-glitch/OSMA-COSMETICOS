@@ -14,7 +14,17 @@ class Venta(models.Model):
     tasa_usd_bcv = models.DecimalField(max_digits=12, decimal_places=4, default=Decimal('1.0000'))
     tasa_usdt = models.DecimalField(max_digits=12, decimal_places=4, default=Decimal('1.0000'))
     
-    anulada = models.BooleanField(default=False)
+    # Registro de vuelto/cambio total entregado al cliente
+    vuelto_total_bs = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'))
+    
+    # Control de idempotencia (protección contra doble clic y reintentos de red)
+    idempotency_key = models.CharField(max_length=64, blank=True, null=True, unique=True, db_index=True)
+
+    # Estado de anulación y auditoría
+    anulada = models.BooleanField(default=False, db_index=True)
+    motivo_anulacion = models.TextField(blank=True, default='')
+    anulada_el = models.DateTimeField(null=True, blank=True)
+
     observaciones = models.TextField(blank=True)
     creado_el = models.DateTimeField(auto_now_add=True)
 

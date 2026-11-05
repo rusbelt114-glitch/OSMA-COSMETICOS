@@ -26,10 +26,31 @@ class PagoVenta(models.Model):
         default='BS',
         help_text="BS, USD o USDT"
     )
+    # Monto neto cobrado aplicado a la venta
     monto_original = models.DecimalField(
         max_digits=14,
         decimal_places=2,
-        verbose_name="Monto en moneda original"
+        verbose_name="Monto neto en moneda original"
+    )
+    # Auditoría de billete/monto entregado por el cliente y vuelto
+    monto_recibido = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name="Monto entregado por cliente"
+    )
+    vuelto_entregado = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        verbose_name="Vuelto entregado en moneda original"
+    )
+    vuelto_entregado_bs = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        verbose_name="Vuelto equivalente en Bs"
     )
     tasa_aplicada = models.DecimalField(
         max_digits=12,

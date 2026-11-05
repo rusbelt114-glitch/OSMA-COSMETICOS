@@ -500,19 +500,52 @@ button.link {
     .art svg {
         width: 120px;
     }
+    header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+    .headnote {
+        text-align: left;
+        width: 100%;
+    }
+    .headnote div {
+        justify-content: flex-start !important;
+    }
+    .live-rates-bar {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+    #btn-sync-rates {
+        width: 100%;
+        padding: 8px 12px !important;
+    }
     .nav {
         gap: 6px;
+        position: sticky;
+        top: 0;
+        z-index: 100;
+        background: #f2f1ec;
+        padding: 8px 0;
     }
     .nav button {
         display: grid;
         justify-items: center;
         text-align: center;
         gap: 5px;
-        font-size: .72rem;
-        padding: 10px 2px;
+        font-size: .76rem;
+        padding: 10px 4px;
+        min-height: 44px;
     }
     .layout {
         grid-template-columns: 1fr;
+    }
+    .fields {
+        grid-template-columns: 1fr !important;
+    }
+    .full {
+        grid-column: 1 / -1;
     }
     .metrics {
         grid-template-columns: 1fr 1fr;
@@ -523,14 +556,17 @@ button.link {
     .card {
         padding: 16px;
     }
+    button, .button, input, select {
+        min-height: 42px;
+    }
 }
 
 @media (max-width: 350px) {
     .fields {
-        grid-template-columns: 1fr;
+        grid-template-columns: 1fr !important;
     }
     .full {
-        grid-column: auto;
+        grid-column: 1 / -1;
     }
     .nav button {
         font-size: .64rem;

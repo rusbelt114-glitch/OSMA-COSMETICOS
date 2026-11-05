@@ -40,11 +40,27 @@
         }
     }
 
-    // Cabecera CSRF para Django
+    // Cabecera CSRF para Django con lectura robusta de cookie y token en DOM
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
     function getHeaders() {
+        const token = getCookie('csrftoken') || window.CSRF_TOKEN || '';
         return {
             'Content-Type': 'application/json',
-            'X-CSRFToken': window.CSRF_TOKEN || ''
+            'X-CSRFToken': token
         };
     }
 
@@ -601,6 +617,7 @@
         $('finish').textContent = 'Registrando venta...';
 
         try {
+            const clientToken = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : ('IDEM-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9));
             const res = await fetch('/api/ventas/', {
                 method: 'POST',
                 headers: getHeaders(),
@@ -608,7 +625,8 @@
                     items: cart,
                     pagos: pagosList,
                     tasa_usd: rateUsd,
-                    tasa_usdt: rateUsdt
+                    tasa_usdt: rateUsdt,
+                    idempotency_key: clientToken
                 })
             });
             if (res.redirected || res.url.includes('/login/')) {
@@ -809,21 +827,23 @@
                 `).join('');
             }
 
-            // Detalle de ventas
+            // Detalle de ventas con soporte de anulación
             const logEl = $('sales-log');
             if (!data.ventas.length) {
                 logEl.innerHTML = '<div class="empty">No hay ventas para el período seleccionado.</div>';
             } else {
                 logEl.innerHTML = data.ventas.map(v => `
-                    <div class="row">
+                    <div class="row" style="${v.anulada ? 'opacity: 0.6; background: #fff5f5;' : ''}">
                         <div>
                             <b>${esc(v.codigo)}</b> · <span class="muted">${esc(v.fecha)}</span>
+                            ${v.anulada ? '<span style="background: #fde8e8; color: #9b1c1c; font-size: .7rem; padding: 2px 6px; border-radius: 4px; font-weight: bold; margin-left: 6px;">ANULADA</span>' : ''}
                             <small>${esc(v.articulos)}</small>
-                            <small class="muted">Cobro: ${esc(v.medios)}</small>
+                            <small class="muted">Cobro: ${esc(v.medios)}${v.vuelto_total_bs > 0 ? ` (Vuelto entregado: Bs ${fmt(v.vuelto_total_bs)})` : ''}</small>
                         </div>
-                        <div style="text-align: right;">
-                            <span class="amount">Bs ${fmt(v.total_bs)}</span>
-                            <small style="color: #376d5e;">Ganancia: Bs ${fmt(v.ganancia_bruta_bs)}</small>
+                        <div style="text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+                            <span class="amount" style="${v.anulada ? 'text-decoration: line-through; color: #888;' : ''}">Bs ${fmt(v.total_bs)}</span>
+                            ${!v.anulada ? `<small style="color: #376d5e;">Ganancia: Bs ${fmt(v.ganancia_bruta_bs)}</small>` : ''}
+                            ${!v.anulada ? `<button type="button" class="secondary" style="padding: 2px 8px; font-size: .72rem; color: #b91c1c; border-color: #fca5a5;" onclick="window.anularVenta('${esc(v.codigo)}')">Anular venta</button>` : ''}
                         </div>
                     </div>
                 `).join('');
@@ -943,6 +963,35 @@
             }
         };
     }
+
+    // Función global para anular venta y reincorporar inventario
+    window.anularVenta = async (codigo) => {
+        if (!confirm(`¿Estás seguro de anular la venta "${codigo}"?\nLas existencias vendidas serán devueltas a sus lotes correspondientes y el total se descontará de los reportes.`)) {
+            return;
+        }
+        try {
+            const res = await fetch(`/api/ventas/${encodeURIComponent(codigo)}/anular/`, {
+                method: 'POST',
+                headers: getHeaders(),
+                body: JSON.stringify({ motivo: 'Anulación solicitada desde interfaz' })
+            });
+            const data = await res.json();
+            if (res.ok && data.exito) {
+                info(data.mensaje);
+                await Promise.all([
+                    loadProducts(),
+                    loadLots(),
+                    loadInventoryMetrics(),
+                    loadReport()
+                ]);
+            } else {
+                info(data.error || 'No se pudo anular la venta.', true);
+            }
+        } catch (err) {
+            console.error('Error al anular venta:', err);
+            info('Error de conexión al intentar anular la venta.', true);
+        }
+    };
 
     // -------------------------------------------------------------------------
     // INICIALIZACIÓN ULTRA RÁPIDA EN PARALELO

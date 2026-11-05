@@ -8,17 +8,18 @@ from productos.models import Producto
 from pagos.models import PagoVenta
 
 @transaction.atomic
-def registrar_venta_fifo(items_carrito, lista_pagos, tasa_usd_bcv, tasa_usdt, observaciones=""):
+def registrar_venta_fifo(items_carrito, lista_pagos, tasa_usd_bcv, tasa_usdt, observaciones="", idempotency_key=None):
     """
-    Registra una venta atómica con control de concurrencia (select_for_update)
-    y deducción automática de inventario mediante FIFO (Primeras Entradas, Primeras Salidas).
+    Registra una venta atómica con control de concurrencia (select_for_update),
+    deducción automática de inventario mediante FIFO, desglose de vuelto/cambio neto
+    y clave de idempotencia contra doble clic / reenvíos duplicados.
+    """
+    # 0. Control de Idempotencia: Si ya se procesó con esta clave, devolver la venta existente
+    if idempotency_key:
+        venta_existente = Venta.objects.filter(idempotency_key=idempotency_key).first()
+        if venta_existente:
+            return venta_existente
 
-    items_carrito: lista de dicts:
-        [{'producto_id': 1, 'cantidad': 2, 'precio_unitario_bs': Decimal('150.00')}]
-    
-    lista_pagos: lista de dicts:
-        [{'metodo': 'EFECTIVO_USD', 'monto_original': Decimal('5.00'), 'moneda': 'USD', 'referencia': ''}]
-    """
     if not items_carrito:
         raise ValidationError("El carrito de venta no puede estar vacío.")
 
@@ -30,6 +31,7 @@ def registrar_venta_fifo(items_carrito, lista_pagos, tasa_usd_bcv, tasa_usdt, ob
         fecha=timezone.now(),
         tasa_usd_bcv=tasa_usd_bcv,
         tasa_usdt=tasa_usdt,
+        idempotency_key=idempotency_key or None,
         observaciones=observaciones
     )
     venta.save()
@@ -142,55 +144,135 @@ def registrar_venta_fifo(items_carrito, lista_pagos, tasa_usd_bcv, tasa_usdt, ob
             detalle.save(update_fields=['costo_total_bs', 'ganancia_bruta_bs'])
 
     # 3. Procesar y verificar pagos
-    total_pagado_bs = Decimal('0.00')
+    pagos_preparados = []
+    total_recibido_bs = Decimal('0.00')
 
     for p in lista_pagos:
-        monto_orig = Decimal(str(p.get('monto_original', 0)))
-        if monto_orig <= Decimal('0.00'):
+        monto_ingresado = Decimal(str(p.get('monto_original', 0)))
+        if monto_ingresado <= Decimal('0.00'):
             continue
 
         metodo = p['metodo']
         referencia = p.get('referencia', '').strip()
 
-        # Determinar moneda y tasa correspondiente
         if metodo == 'EFECTIVO_USD':
             moneda = 'USD'
             tasa = tasa_usd_bcv
-            equiv_bs = monto_orig * tasa
+            equiv_bs = (monto_ingresado * tasa).quantize(Decimal('0.01'))
         elif metodo == 'USDT':
             moneda = 'USDT'
             tasa = tasa_usdt
-            equiv_bs = monto_orig * tasa
+            equiv_bs = (monto_ingresado * tasa).quantize(Decimal('0.01'))
         else: # EFECTIVO_BS o PAGO_MOVIL
             moneda = 'BS'
             tasa = Decimal('1.0000')
-            equiv_bs = monto_orig
+            equiv_bs = monto_ingresado
 
-        PagoVenta.objects.create(
-            venta=venta,
-            metodo=metodo,
-            moneda=moneda,
-            monto_original=monto_orig,
-            tasa_aplicada=tasa,
-            monto_equivalente_bs=equiv_bs,
-            referencia=referencia
-        )
-
-        total_pagado_bs += equiv_bs
+        pagos_preparados.append({
+            'metodo': metodo,
+            'moneda': moneda,
+            'tasa': tasa,
+            'monto_recibido': monto_ingresado,
+            'equiv_recibido_bs': equiv_bs,
+            'monto_neto_orig': monto_ingresado,
+            'monto_neto_bs': equiv_bs,
+            'vuelto_orig': Decimal('0.00'),
+            'vuelto_bs': Decimal('0.00'),
+            'referencia': referencia
+        })
+        total_recibido_bs += equiv_bs
 
     # Verificar que el pago cubra el total (con tolerancia de 0.5 Bs por redondeos en divisas)
-    diferencia = total_venta_bs - total_pagado_bs
+    diferencia = total_venta_bs - total_recibido_bs
     if diferencia > Decimal('0.50'):
         raise ValidationError(
-            f"El total pagado (Bs {total_pagado_bs:.2f}) es menor al total de la venta (Bs {total_venta_bs:.2f}). "
+            f"El total pagado (Bs {total_recibido_bs:.2f}) es menor al total de la venta (Bs {total_venta_bs:.2f}). "
             f"Faltan Bs {diferencia:.2f}."
+        )
+
+    # Calcular y asignar vuelto/cambio si el cliente pagó de más
+    sobrante_por_asignar_bs = max(Decimal('0.00'), total_recibido_bs - total_venta_bs)
+    vuelto_total_bs = sobrante_por_asignar_bs
+
+    # Distribuir el vuelto preferentemente en pagos en efectivo
+    if sobrante_por_asignar_bs > Decimal('0.00'):
+        # Orden de preferencia para descontar vuelto: EFECTIVO_BS, EFECTIVO_USD, USDT, otros
+        orden_metodos = ['EFECTIVO_BS', 'EFECTIVO_USD', 'USDT', 'PAGO_MOVIL']
+        pagos_ordenados = sorted(
+            pagos_preparados,
+            key=lambda x: orden_metodos.index(x['metodo']) if x['metodo'] in orden_metodos else 99
+        )
+
+        for p_item in pagos_ordenados:
+            if sobrante_por_asignar_bs <= Decimal('0.00'):
+                break
+            descuento_bs = min(p_item['monto_neto_bs'], sobrante_por_asignar_bs)
+            p_item['monto_neto_bs'] -= descuento_bs
+            p_item['vuelto_bs'] += descuento_bs
+
+            # Convertir vuelto a la moneda original del pago
+            if p_item['moneda'] != 'BS' and p_item['tasa'] > 0:
+                p_item['vuelto_orig'] = (p_item['vuelto_bs'] / p_item['tasa']).quantize(Decimal('0.01'))
+                p_item['monto_neto_orig'] = p_item['monto_recibido'] - p_item['vuelto_orig']
+            else:
+                p_item['vuelto_orig'] = p_item['vuelto_bs']
+                p_item['monto_neto_orig'] = p_item['monto_neto_bs']
+
+            sobrante_por_asignar_bs -= descuento_bs
+
+    # Guardar registros de PagoVenta con auditoría de cobro neto y vuelto entregado
+    for p_item in pagos_preparados:
+        PagoVenta.objects.create(
+            venta=venta,
+            metodo=p_item['metodo'],
+            moneda=p_item['moneda'],
+            monto_original=p_item['monto_neto_orig'],
+            monto_recibido=p_item['monto_recibido'],
+            vuelto_entregado=p_item['vuelto_orig'],
+            vuelto_entregado_bs=p_item['vuelto_bs'],
+            tasa_aplicada=p_item['tasa'],
+            monto_equivalente_bs=p_item['monto_neto_bs'],
+            referencia=p_item['referencia']
         )
 
     # 4. Actualizar totales finales de la venta
     venta.total_bs = total_venta_bs
     venta.costo_total_bs = costo_total_venta_bs
     venta.ganancia_bruta_bs = total_venta_bs - costo_total_venta_bs
-    venta.save(update_fields=['total_bs', 'costo_total_bs', 'ganancia_bruta_bs'])
+    venta.vuelto_total_bs = vuelto_total_bs
+    venta.save(update_fields=['total_bs', 'costo_total_bs', 'ganancia_bruta_bs', 'vuelto_total_bs'])
+
+    return venta
+
+
+@transaction.atomic
+def anular_venta_fifo(identificador, motivo=""):
+    """
+    Anula una venta y devuelve con precisión matemática cada unidad
+    descontada a su entrada/lote original mediante DesgloseLoteVenta.
+    """
+    try:
+        if str(identificador).isdigit():
+            venta = Venta.objects.select_for_update().get(id=int(identificador))
+        else:
+            venta = Venta.objects.select_for_update().get(codigo=str(identificador).strip())
+    except Venta.DoesNotExist:
+        raise ValidationError(f"No existe ninguna venta con identificador '{identificador}'")
+
+    if venta.anulada:
+        raise ValidationError(f"La venta {venta.codigo} ya fue anulada previamente.")
+
+    # Reintegrar existencias a cada lote por el desglose original de la venta
+    for detalle in venta.detalles.select_related('producto').all():
+        for desglose in detalle.desgloses_lote.select_related('entrada').all():
+            entrada = EntradaMercancia.objects.select_for_update().get(id=desglose.entrada_id)
+            entrada.cantidad_disponible += desglose.cantidad_descontada
+            entrada.save(update_fields=['cantidad_disponible'])
+
+    venta.anulada = True
+    venta.motivo_anulacion = motivo or "Anulación de venta y reversión de inventario"
+    venta.anulada_el = timezone.now()
+    venta.save(update_fields=['anulada', 'motivo_anulacion', 'anulada_el'])
 
     return venta
 

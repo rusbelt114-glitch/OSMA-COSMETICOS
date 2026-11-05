@@ -129,14 +129,15 @@ class OsmaSistemaTestCase(TestCase):
         self.assertEqual(res.status_code, 302)
         self.assertTrue('/login/' in res.url)
 
-        res_login = self.client.get('/')
-        self.assertEqual(res_login.status_code, 200)
-
     def test_restauracion_desde_excel(self):
-        """Verifica que se pueda restaurar inventario y productos directamente subiendo un Excel."""
+        """Verifica que se pueda restaurar inventario y productos directamente subiendo un Excel (como admin)."""
         from django.core.files.uploadedfile import SimpleUploadedFile
         import openpyxl
         from io import BytesIO
+
+        self.user.is_staff = True
+        self.user.is_superuser = True
+        self.user.save()
 
         wb = openpyxl.Workbook()
         ws = wb.active

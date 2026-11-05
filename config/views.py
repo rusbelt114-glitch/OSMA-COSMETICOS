@@ -36,22 +36,15 @@ def custom_login_view(request):
         if not store_user:
             store_user = User.objects.create_user(username='tienda', password='1234')
 
-        # 1. Comprobar clave del usuario de la tienda
-        if store_user.check_password(password):
-            auth_login(request, store_user)
-            return redirect(request.GET.get('next') or '/')
-
-        # Permitir claves por defecto iniciales (1234 u osma1234) en el primer ingreso a la nube
-        if password in ('1234', 'osma1234'):
-            store_user.set_password(password)
-            store_user.save()
-            auth_login(request, store_user)
-            return redirect(request.GET.get('next') or '/')
-
-        # 2. Comprobar superusuario admin
+        # 1. Comprobar si coincide con la clave del superusuario admin
         admin_user = User.objects.filter(is_superuser=True, is_active=True).first()
         if admin_user and admin_user.check_password(password):
             auth_login(request, admin_user)
+            return redirect(request.GET.get('next') or '/')
+
+        # 2. Comprobar si coincide con la clave del usuario de tienda
+        if store_user.check_password(password):
+            auth_login(request, store_user)
             return redirect(request.GET.get('next') or '/')
 
         error = True

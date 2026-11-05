@@ -46,6 +46,8 @@ def api_reporte_resumen(request):
             'total_bs': float(v.total_bs),
             'costo_total_bs': float(v.costo_total_bs),
             'ganancia_bruta_bs': float(v.ganancia_bruta_bs),
+            'vuelto_total_bs': float(v.vuelto_total_bs),
+            'anulada': v.anulada,
             'articulos': articulos_str,
             'medios': medios_str
         })
@@ -144,16 +146,55 @@ def _guardar_respaldo_preventivo():
 
 
 def _restaurar_desde_json(archivo):
-    """Restaura todas las tablas del sistema desde un archivo .json de dumpdata."""
+    """
+    Restaura tablas del sistema desde un archivo .json validando
+    estrictamente que solo contenga datos de negocio autorizados
+    (productos, inventario, ventas, pagos, tasas) y nunca usuarios ni permisos.
+    """
+    import json
     tmp_fd, tmp_path = tempfile.mkstemp(suffix='.json')
     try:
-        with open(tmp_fd, 'wb') as tmp_file:
-            for chunk in archivo.chunks():
-                tmp_file.write(chunk)
+        contenido_bytes = archivo.read()
+        try:
+            datos_json = json.loads(contenido_bytes.decode('utf-8'))
+        except Exception as e:
+            return JsonResponse({'error': f'Archivo JSON inválido o dañado: {str(e)}'}, status=400)
+
+        if not isinstance(datos_json, list):
+            return JsonResponse({'error': 'Estructura de copia de seguridad JSON inválida.'}, status=400)
+
+        # Tablas de negocio permitidas
+        TABLAS_PERMITIDAS = {
+            'productos.producto',
+            'inventario.entradamercancia',
+            'ventas.venta',
+            'ventas.detalleventa',
+            'ventas.desgloseloteventa',
+            'pagos.pagoventa',
+            'tasas.historialtasa',
+        }
+
+        # Validar cada registro
+        registros_seguros = []
+        for obj in datos_json:
+            modelo = str(obj.get('model', '')).lower()
+            if modelo.startswith(('auth.', 'contenttypes.', 'sessions.', 'admin.')):
+                return JsonResponse({
+                    'error': f'Acceso denegado: El archivo contiene datos restringidos de seguridad ({modelo}).'
+                }, status=400)
+            if modelo in TABLAS_PERMITIDAS:
+                registros_seguros.append(obj)
+
+        if not registros_seguros:
+            return JsonResponse({'error': 'El archivo no contiene registros de inventario o ventas válidos.'}, status=400)
+
+        with open(tmp_fd, 'w', encoding='utf-8') as tmp_file:
+            json.dump(registros_seguros, tmp_file)
+
         call_command('loaddata', tmp_path)
         return JsonResponse({
             'exito': True,
-            'mensaje': f'¡Copia de seguridad "{archivo.name}" restaurada con éxito! Todos los productos, existencias y ventas han sido recuperados.'
+            'mensaje': f'¡Copia de seguridad "{archivo.name}" restaurada con éxito! Se recuperaron {len(registros_seguros)} registros verificados.'
         })
     except Exception as e:
         return JsonResponse({'error': f'Error al restaurar archivo JSON: {str(e)}'}, status=400)
@@ -166,6 +207,10 @@ def _restaurar_desde_json(archivo):
 
 
 def _procesar_hoja_entradas(ws):
+    """
+    Procesa la hoja de entradas con prevención estricta de duplicados.
+    Si una entrada ya existe, actualiza sus saldos en vez de duplicarla.
+    """
     prods, entradas = 0, 0
     for row in ws.iter_rows(min_row=2, values_only=True):
         if not row or len(row) < 7 or not row[2]:
@@ -173,7 +218,7 @@ def _procesar_hoja_entradas(ws):
         prod_nombre = str(row[2]).strip()
         try:
             cant_recibida = int(row[3] or 0)
-            cant_disponible = int(row[4] or cant_recibida)
+            cant_disponible = int(row[4] if row[4] is not None else cant_recibida)
             costo_unit = Decimal(str(row[5] or 0))
             precio_venta = Decimal(str(row[6] or 0))
             obs = str(row[8] or '') if len(row) > 8 and row[8] else ''
@@ -190,19 +235,40 @@ def _procesar_hoja_entradas(ws):
         if created:
             prods += 1
 
-        EntradaMercancia.objects.create(
-            producto=prod,
-            cantidad_recibida=cant_recibida,
-            cantidad_disponible=cant_disponible,
-            costo_unitario=costo_unit,
-            precio_venta=precio_venta,
-            observaciones=obs
-        )
+        # Comprobar si ya existe una entrada idéntica para evitar duplicación
+        entrada_existente = None
+        if row[0] and str(row[0]).isdigit():
+            entrada_existente = EntradaMercancia.objects.filter(id=int(row[0]), producto=prod).first()
+
+        if not entrada_existente:
+            entrada_existente = EntradaMercancia.objects.filter(
+                producto=prod,
+                costo_unitario=costo_unit,
+                precio_venta=precio_venta,
+                observaciones=obs
+            ).first()
+
+        if entrada_existente:
+            entrada_existente.cantidad_disponible = cant_disponible
+            entrada_existente.save(update_fields=['cantidad_disponible'])
+        else:
+            EntradaMercancia.objects.create(
+                producto=prod,
+                cantidad_recibida=cant_recibida,
+                cantidad_disponible=cant_disponible,
+                costo_unitario=costo_unit,
+                precio_venta=precio_venta,
+                observaciones=obs
+            )
         entradas += 1
     return prods, entradas
 
 
 def _procesar_hoja_inventario(ws):
+    """
+    Procesa catálogo general respetando ceros (sin inflar existencias)
+    y evitando duplicaciones en re-importaciones.
+    """
     prods, entradas = 0, 0
     for row in ws.iter_rows(min_row=2, values_only=True):
         if not row or len(row) < 3:
@@ -243,34 +309,50 @@ def _procesar_hoja_inventario(ws):
         if created:
             prods += 1
 
+        # Respetar unidades: si el archivo marca stock > 0
         if stock > 0:
-            EntradaMercancia.objects.create(
-                producto=prod,
-                cantidad_recibida=stock,
-                cantidad_disponible=stock,
-                costo_unitario=costo,
-                precio_venta=precio,
-                observaciones="Recuperado desde Excel"
-            )
+            # Buscar si el producto ya tiene un lote activo para actualizarlo en vez de duplicarlo
+            lote_existente = EntradaMercancia.objects.filter(producto=prod, cantidad_disponible__gt=0).first()
+            if lote_existente:
+                lote_existente.cantidad_disponible = stock
+                if costo > 0:
+                    lote_existente.costo_unitario = costo
+                if precio > 0:
+                    lote_existente.precio_venta = precio
+                lote_existente.save()
+            else:
+                EntradaMercancia.objects.create(
+                    producto=prod,
+                    cantidad_recibida=stock,
+                    cantidad_disponible=stock,
+                    costo_unitario=costo,
+                    precio_venta=precio,
+                    observaciones="Importado desde catálogo Excel"
+                )
             entradas += 1
     return prods, entradas
 
 
 def _restaurar_desde_excel(archivo):
-    """Carga y procesa productos y entradas desde un reporte o catálogo Excel."""
+    """
+    Carga y procesa productos y entradas desde un reporte o catálogo Excel
+    con transacción atómica: o se cargan todos correctamente o nada.
+    """
+    from django.db import transaction
     try:
         wb = openpyxl.load_workbook(archivo, data_only=True)
-        if "Entradas de Mercancía" in wb.sheetnames:
-            prods, entradas = _procesar_hoja_entradas(wb["Entradas de Mercancía"])
-        elif "Inventario Actual" in wb.sheetnames or len(wb.sheetnames) > 0:
-            sheet_name = "Inventario Actual" if "Inventario Actual" in wb.sheetnames else wb.sheetnames[0]
-            prods, entradas = _procesar_hoja_inventario(wb[sheet_name])
-        else:
-            return JsonResponse({'error': 'El archivo Excel no tiene hojas de inventario reconocibles.'}, status=400)
+        with transaction.atomic():
+            if "Entradas de Mercancía" in wb.sheetnames:
+                prods, entradas = _procesar_hoja_entradas(wb["Entradas de Mercancía"])
+            elif "Inventario Actual" in wb.sheetnames or len(wb.sheetnames) > 0:
+                sheet_name = "Inventario Actual" if "Inventario Actual" in wb.sheetnames else wb.sheetnames[0]
+                prods, entradas = _procesar_hoja_inventario(wb[sheet_name])
+            else:
+                return JsonResponse({'error': 'El archivo Excel no tiene hojas de inventario reconocibles.'}, status=400)
 
         return JsonResponse({
             'exito': True,
-            'mensaje': f'¡Excel "{archivo.name}" procesado con éxito! Se cargaron/actualizaron {prods} productos y {entradas} registros de existencias.'
+            'mensaje': f'¡Excel "{archivo.name}" procesado con éxito! Se verificaron {prods} productos y {entradas} saldos de existencias sin duplicados.'
         })
     except Exception as e:
         return JsonResponse({'error': f'Error al leer archivo Excel: {str(e)}'}, status=400)
@@ -282,7 +364,13 @@ def api_restaurar_copia(request):
     """
     Punto de entrada para restaurar copias de seguridad sin usar la terminal.
     Soporta archivos .json y archivos .xlsx.
+    RESTRINGIDO: Solo administradores pueden ejecutar restauraciones.
     """
+    if not (request.user.is_superuser or request.user.is_staff):
+        return JsonResponse({
+            'error': 'Acceso denegado: Solo el administrador del negocio puede restaurar copias de seguridad.'
+        }, status=403)
+
     archivo = request.FILES.get('archivo')
     if not archivo:
         return JsonResponse({'error': 'Debes seleccionar un archivo para restaurar.'}, status=400)

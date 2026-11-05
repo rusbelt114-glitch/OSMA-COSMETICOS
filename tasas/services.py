@@ -58,8 +58,33 @@ def sincronizar_tasas_en_linea():
                 resultados['exito'] = True
                 resultados['mensaje'] = 'Tasas actualizadas exitosamente desde el BCV y mercado.'
     except Exception as e:
-        logger.warning(f"No se pudo sincronizar la tasa en línea: {e}")
-        resultados['mensaje'] = f'No se pudo conectar a la API ({e}). Usando última tasa guardada en el sistema.'
+        logger.warning(f"Falla con DolarApi ({e}). Intentando proveedor alternativo...")
+        # Proveedor alternativo pyDolarVenezuela
+        try:
+            from pyDolarVenezuela.pages import BCV, CriptoDolar
+            from pyDolarVenezuela import Monitor
+            monitor_bcv = Monitor(BCV, 'USD')
+            bcv_data = monitor_bcv.get_value()
+            if bcv_data:
+                tasa_val = Decimal(str(bcv_data))
+                HistorialTasa.objects.create(tipo='USD_BCV', valor=tasa_val, fuente='BCV (pyDolarVenezuela)', es_manual=False)
+                resultados['usd_bcv'] = tasa_val
+
+            monitor_usdt = Monitor(CriptoDolar, 'USDT')
+            usdt_data = monitor_usdt.get_value()
+            if usdt_data:
+                tasa_val = Decimal(str(usdt_data))
+                HistorialTasa.objects.create(tipo='USDT', valor=tasa_val, fuente='USDT (CriptoDolar)', es_manual=False)
+                resultados['usdt'] = tasa_val
+
+            if resultados['usd_bcv']:
+                resultados['exito'] = True
+                resultados['mensaje'] = 'Tasas actualizadas mediante proveedor de contingencia.'
+                return resultados
+        except Exception as e2:
+            logger.warning(f"Falla en proveedor de contingencia: {e2}")
+
+        resultados['mensaje'] = f'No se pudo conectar a los servicios de tasa. Se conservó la última tasa válida.'
         resultados['usd_bcv'] = HistorialTasa.obtener_ultima_tasa('USD_BCV')
         resultados['usdt'] = HistorialTasa.obtener_ultima_tasa('USDT')
 
