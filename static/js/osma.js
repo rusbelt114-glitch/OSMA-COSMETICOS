@@ -23,6 +23,12 @@
         return Number.isNaN(val) ? 0 : val;
     };
 
+    function getBcvRate() {
+        const rateInput = $('rate-usd');
+        const r = rateInput ? parseMoney(rateInput.value) : 0;
+        return (r > 0) ? r : (window.INITIAL_RATES && window.INITIAL_RATES.usd_bcv ? window.INITIAL_RATES.usd_bcv : 1);
+    }
+
     let allProducts = [];
     let recentEntries = [];
     let currentEntriesPage = 1;
@@ -290,6 +296,54 @@
 
     $('clear-selection').onclick = resetEntryForm;
 
+    // Conversión bidireccional USD <-> Bs en Entrada de Mercancía
+    if ($('cost-usd')) {
+        $('cost-usd').oninput = () => {
+            const valUsd = parseMoney($('cost-usd').value);
+            const rate = getBcvRate();
+            if (valUsd > 0) {
+                $('cost').value = (valUsd * rate).toFixed(2).replace('.', ',');
+            } else if ($('cost-usd').value.trim() === '') {
+                $('cost').value = '';
+            }
+        };
+    }
+    if ($('cost')) {
+        $('cost').oninput = () => {
+            const valBs = parseMoney($('cost').value);
+            const rate = getBcvRate();
+            if (valBs > 0 && rate > 0) {
+                if ($('cost-usd')) $('cost-usd').value = (valBs / rate).toFixed(2).replace('.', ',');
+            } else if ($('cost').value.trim() === '') {
+                if ($('cost-usd')) $('cost-usd').value = '';
+            }
+        };
+    }
+
+    if ($('price-usd')) {
+        $('price-usd').oninput = () => {
+            const valUsd = parseMoney($('price-usd').value);
+            const rate = getBcvRate();
+            if (valUsd > 0) {
+                $('price').value = (valUsd * rate).toFixed(2).replace('.', ',');
+            } else if ($('price-usd').value.trim() === '') {
+                $('price').value = '';
+            }
+        };
+    }
+    if ($('price')) {
+        $('price').oninput = () => {
+            const valBs = parseMoney($('price').value);
+            const rate = getBcvRate();
+            if (valBs > 0 && rate > 0) {
+                if ($('price-usd')) $('price-usd').value = (valBs / rate).toFixed(2).replace('.', ',');
+            } else if ($('price').value.trim() === '') {
+                if ($('price-usd')) $('price-usd').value = '';
+            }
+        };
+    }
+
+
     async function handleSaveEntry(e) {
         e?.preventDefault?.();
         const nombre = $('name').value.trim();
@@ -486,7 +540,10 @@
 
         const selectedOpt = select.options[select.selectedIndex];
         if (selectedOpt && selectedOpt.dataset.price) {
-            $('sell-unit-price').value = Number(selectedOpt.dataset.price).toFixed(2).replace('.', ',');
+            const pBs = Number(selectedOpt.dataset.price);
+            const rBcv = getBcvRate();
+            $('sell-unit-price').value = pBs.toFixed(2).replace('.', ',');
+            if ($('sell-unit-price-usd')) $('sell-unit-price-usd').value = rBcv > 0 ? (pBs / rBcv).toFixed(2).replace('.', ',') : '';
         }
     }
 
@@ -494,9 +551,36 @@
     $('sell-product-select').onchange = () => {
         const opt = $('sell-product-select').options[$('sell-product-select').selectedIndex];
         if (opt && opt.dataset.price) {
-            $('sell-unit-price').value = Number(opt.dataset.price).toFixed(2).replace('.', ',');
+            const pBs = Number(opt.dataset.price);
+            const rBcv = getBcvRate();
+            $('sell-unit-price').value = pBs.toFixed(2).replace('.', ',');
+            if ($('sell-unit-price-usd')) $('sell-unit-price-usd').value = rBcv > 0 ? (pBs / rBcv).toFixed(2).replace('.', ',') : '';
         }
     };
+
+    // Conversión bidireccional USD <-> Bs en precio de venta en caja
+    if ($('sell-unit-price-usd')) {
+        $('sell-unit-price-usd').oninput = () => {
+            const valUsd = parseMoney($('sell-unit-price-usd').value);
+            const rate = getBcvRate();
+            if (valUsd > 0) {
+                $('sell-unit-price').value = (valUsd * rate).toFixed(2).replace('.', ',');
+            } else if ($('sell-unit-price-usd').value.trim() === '') {
+                $('sell-unit-price').value = '';
+            }
+        };
+    }
+    if ($('sell-unit-price')) {
+        $('sell-unit-price').oninput = () => {
+            const valBs = parseMoney($('sell-unit-price').value);
+            const rate = getBcvRate();
+            if (valBs > 0 && rate > 0) {
+                if ($('sell-unit-price-usd')) $('sell-unit-price-usd').value = (valBs / rate).toFixed(2).replace('.', ',');
+            } else if ($('sell-unit-price').value.trim() === '') {
+                if ($('sell-unit-price-usd')) $('sell-unit-price-usd').value = '';
+            }
+        };
+    }
 
     function _agregarLoteAlCarrito(opt, unidades, precioUnitario) {
         const loteId = Number(opt.value);
@@ -564,6 +648,7 @@
         if (!cart.length) {
             el.innerHTML = '<div class="empty">La venta actual está vacía. Agrega productos de la izquierda.</div>';
             $('sale-total').textContent = 'Bs 0,00';
+            if ($('sale-total-usd')) $('sale-total-usd').textContent = '≈ USD $ 0,00';
             window.saleRatesFrozen = false;
             updatePaymentCalculations();
             return;
@@ -587,7 +672,10 @@
             `;
         }).join('');
 
+        const rBcv = getBcvRate();
+        const totalUsd = rBcv > 0 ? (total / rBcv) : 0;
         $('sale-total').textContent = 'Bs ' + fmt(total);
+        if ($('sale-total-usd')) $('sale-total-usd').textContent = `≈ USD $ ${fmt(totalUsd)}`;
     }
 
     $('cart').onclick = e => {
@@ -998,6 +1086,33 @@
         }
     }
 
+    function updateExpenseEquivalent() {
+        if (!$('expense-equiv-note')) return;
+        const curr = $('expense-currency') ? $('expense-currency').value : 'BS';
+        const amount = parseMoney($('expense-amount') ? $('expense-amount').value : 0);
+        const rate = parseMoney($('expense-rate') ? $('expense-rate').value : 0) || 1;
+
+        if (amount <= 0) {
+            $('expense-equiv-note').textContent = (curr === 'BS') ? 'Equivalente en USD: $ 0,00' : 'Equivalente en Bs: Bs 0,00';
+            return;
+        }
+
+        if (curr === 'USD') {
+            const equivBs = amount * rate;
+            $('expense-equiv-note').textContent = `Equivalente en Bs: Bs ${fmt(equivBs)} (a tasa ${fmt(rate)})`;
+        } else if (curr === 'USDT') {
+            const equivBs = amount * rate;
+            $('expense-equiv-note').textContent = `Equivalente en Bs: Bs ${fmt(equivBs)} (a tasa USDT ${fmt(rate)})`;
+        } else {
+            const rateBcv = getBcvRate();
+            const equivUsd = rateBcv > 0 ? (amount / rateBcv) : 0;
+            $('expense-equiv-note').textContent = `Equivalente en USD: $ ${fmt(equivUsd)} (a tasa BCV ${fmt(rateBcv)})`;
+        }
+    }
+
+    if ($('expense-amount')) $('expense-amount').oninput = updateExpenseEquivalent;
+    if ($('expense-rate')) $('expense-rate').oninput = updateExpenseEquivalent;
+
     if ($('expense-currency')) {
         $('expense-currency').onchange = () => {
             const curr = $('expense-currency').value;
@@ -1011,6 +1126,7 @@
                 $('expense-rate').value = '1.00';
                 $('expense-method').value = 'EFECTIVO_BS';
             }
+            updateExpenseEquivalent();
         };
     }
 

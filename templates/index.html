@@ -106,13 +106,22 @@
                         <input id="minimum" type="number" min="0" max="10000" step="1" value="3" required>
                     </label>
                     <label>
-                        Costo por unidad · Bs
+                        Costo unidad · USD ($)
+                        <input id="cost-usd" inputmode="decimal" placeholder="0,00">
+                    </label>
+                    <label>
+                        Costo unidad · Bs
                         <input id="cost" inputmode="decimal" required placeholder="0,00">
                     </label>
                     <label>
-                        Precio de venta · Bs
+                        Precio venta · USD ($)
+                        <input id="price-usd" inputmode="decimal" placeholder="0,00">
+                    </label>
+                    <label>
+                        Precio venta · Bs
                         <input id="price" inputmode="decimal" required placeholder="0,00">
                     </label>
+                    <p class="muted full" style="font-size: 0.8rem; margin: -4px 0 6px 0;">💡 <b>Conversión automática:</b> Puedes escribir en Dólares ($) o en Bolívares (Bs); el sistema calcula automáticamente el cambio a la tasa oficial del día.</p>
                 </div>
                 <div style="margin-top: 14px; display: flex; gap: 8px;">
                     <button type="button" class="primary" id="btn-save-entry">Guardar entrada</button>
@@ -187,6 +196,10 @@
                         <input id="units" type="number" min="1" max="10000" value="1">
                     </label>
                     <label>
+                        Precio venta · USD ($)
+                        <input id="sell-unit-price-usd" inputmode="decimal" placeholder="0,00">
+                    </label>
+                    <label>
                         Precio venta (Bs)
                         <input id="sell-unit-price" inputmode="decimal" placeholder="0,00">
                     </label>
@@ -199,8 +212,11 @@
             <div class="card">
                 <h3>Venta actual</h3>
                 <div id="cart"></div>
-                <div class="row">
-                    <b>Total a pagar</b>
+                <div class="row" style="align-items: baseline;">
+                    <div>
+                        <b>Total a pagar</b>
+                        <small id="sale-total-usd" style="display: block; color: var(--muted); font-size: 0.95rem; font-weight: 500;">≈ USD $ 0,00</small>
+                    </div>
                     <span class="amount" id="sale-total" style="font-size: 1.4rem;">Bs 0,00</span>
                 </div>
                 <h3>Pago compartido multi-moneda</h3>
@@ -342,6 +358,7 @@
                     <label>
                         Monto gastado
                         <input id="expense-amount" inputmode="decimal" placeholder="0,00">
+                        <small id="expense-equiv-note" style="display: block; color: var(--muted); margin-top: 4px; font-size: 0.82rem;">Equivalente: Bs 0,00</small>
                     </label>
                     <label>
                         Medio con que se pagó
