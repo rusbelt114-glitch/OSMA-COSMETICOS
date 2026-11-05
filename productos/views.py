@@ -84,7 +84,7 @@ def _eliminar_producto_total(prod_id, forzar=False):
     
     # Si se fuerza o no tiene ventas:
     for item in producto.ventas_detalle.all():
-        item.desgloses_fifo.all().delete()
+        item.desgloses_lote.all().delete()
         item.delete()
     producto.entradas.all().delete()
     nombre = producto.nombre

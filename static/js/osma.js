@@ -1114,8 +1114,8 @@
     // 05 · ANÁLISIS Y REPORTES (RESUMEN DEL PERÍODO + INVENTARIO ACTUAL)
     // -------------------------------------------------------------------------
     async function loadReport() {
-        const from = $('from-date').value;
-        const to = $('to-date').value;
+        const from = $('from-date') ? $('from-date').value : '';
+        const to = $('to-date') ? $('to-date').value : '';
         let url = '/api/reportes/resumen/?';
         if (from) url += `desde=${encodeURIComponent(from)}&`;
         if (to) url += `hasta=${encodeURIComponent(to)}`;
@@ -1281,8 +1281,8 @@
         };
     });
 
-    $('from-date').onchange = () => { void loadReport(); };
-    $('to-date').onchange = () => { void loadReport(); };
+    if ($('from-date')) $('from-date').onchange = () => { void loadReport(); };
+    if ($('to-date')) $('to-date').onchange = () => { void loadReport(); };
 
     // -------------------------------------------------------------------------
     // RESTAURACIÓN DE COPIAS DE SEGURIDAD (.JSON O .XLSX) SIN COMANDOS

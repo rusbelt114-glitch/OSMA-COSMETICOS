@@ -432,7 +432,7 @@ def api_reiniciar_sistema(request):
     """
     try:
         import json
-        from ventas.models import Venta, ItemVenta, DesgloseVentaFIFO
+        from ventas.models import Venta, DetalleVenta, DesgloseLoteVenta
         from pagos.models import PagoVenta, Gasto
         from inventario.models import EntradaMercancia
         from productos.models import Producto
@@ -441,8 +441,8 @@ def api_reiniciar_sistema(request):
         modo = data.get('modo', 'todo_a_cero')
 
         # Eliminar siempre movimientos de prueba
-        DesgloseVentaFIFO.objects.all().delete()
-        ItemVenta.objects.all().delete()
+        DesgloseLoteVenta.objects.all().delete()
+        DetalleVenta.objects.all().delete()
         PagoVenta.objects.all().delete()
         Venta.objects.all().delete()
         Gasto.objects.all().delete()

@@ -314,3 +314,71 @@ class TestAjustesFinalesOsma(TestCase):
         self.assertIn("Cobros y Pagos", wb.sheetnames)
         self.assertIn("Gastos y Retiros", wb.sheetnames)
 
+
+    def test_11_reinicio_datos_solo_ventas_y_todo_a_cero(self):
+        """Prueba los modos de reinicio de datos de prueba para puesta a punto."""
+        prod = Producto.objects.create(nombre="Sombra Individual Glitter", stock_minimo=1)
+        entrada = EntradaMercancia.objects.create(
+            producto=prod,
+            cantidad_recibida=10,
+            cantidad_disponible=10,
+            costo_unitario=Decimal('30.00'),
+            precio_venta=Decimal('75.00')
+        )
+        # Vender 2 unidades
+        items = [{'producto_id': prod.id, 'lote_id': entrada.id, 'cantidad': 2, 'precio_unitario_bs': 75.00}]
+        pagos = [{'metodo': 'EFECTIVO_BS', 'monto_original': 150.00}]
+        registrar_venta_fifo(items, pagos, self.tasa_usd_ficticia, self.tasa_usdt_ficticia)
+
+        Gasto.objects.create(
+            descripcion="Gasto prueba bolsas",
+            categoria="TIENDA",
+            monto_original=Decimal('20.00'),
+            moneda="BS",
+            monto_equivalente_bs=Decimal('20.00'),
+            metodo="EFECTIVO_BS"
+        )
+
+        entrada.refresh_from_db()
+        self.assertEqual(entrada.cantidad_disponible, 8)
+        self.assertEqual(Venta.objects.count(), 1)
+        self.assertEqual(Gasto.objects.count(), 1)
+
+        # 1. Modo solo ventas y gastos: borra ventas y gastos, reconstituye stock
+        res = self.client.post('/api/sistema/reiniciar/', data={'modo': 'solo_ventas_gastos'}, content_type='application/json')
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(Venta.objects.count(), 0)
+        self.assertEqual(Gasto.objects.count(), 0)
+        entrada.refresh_from_db()
+        self.assertEqual(entrada.cantidad_disponible, 10) # Reconstituido
+        self.assertEqual(Producto.objects.count(), 1)    # Catálogo conservado
+
+        # 2. Modo todo a cero: borra todo para entregar en 0
+        res2 = self.client.post('/api/sistema/reiniciar/', data={'modo': 'todo_a_cero'}, content_type='application/json')
+        self.assertEqual(res2.status_code, 200)
+        self.assertEqual(Producto.objects.count(), 0)
+        self.assertEqual(EntradaMercancia.objects.count(), 0)
+
+    def test_12_forzar_eliminacion_producto_con_ventas(self):
+        """Si un producto tiene ventas de prueba, permite forzar su eliminación."""
+        prod = Producto.objects.create(nombre="Delineador Negro Intenso", stock_minimo=1)
+        entrada = EntradaMercancia.objects.create(
+            producto=prod,
+            cantidad_recibida=5,
+            cantidad_disponible=5,
+            costo_unitario=Decimal('25.00'),
+            precio_venta=Decimal('60.00')
+        )
+        items = [{'producto_id': prod.id, 'lote_id': entrada.id, 'cantidad': 1, 'precio_unitario_bs': 60.00}]
+        pagos = [{'metodo': 'EFECTIVO_BS', 'monto_original': 60.00}]
+        registrar_venta_fifo(items, pagos, self.tasa_usd_ficticia, self.tasa_usdt_ficticia)
+
+        # Intento de borrado normal: bloqueado pero avisa que puede forzar
+        res1 = self.client.post('/api/productos/', data={'accion': 'eliminar_total', 'producto_id': prod.id}, content_type='application/json')
+        self.assertEqual(res1.status_code, 400)
+        self.assertTrue(res1.json().get('puede_forzar'))
+
+        # Intento de borrado forzado: éxito total
+        res2 = self.client.post('/api/productos/', data={'accion': 'eliminar_total', 'producto_id': prod.id, 'forzar': True}, content_type='application/json')
+        self.assertEqual(res2.status_code, 200)
+        self.assertFalse(Producto.objects.filter(id=prod.id).exists())

@@ -1,5 +1,5 @@
 from django.core.management.base import BaseCommand
-from ventas.models import Venta, ItemVenta, DesgloseVentaFIFO
+from ventas.models import Venta, DetalleVenta, DesgloseLoteVenta
 from pagos.models import PagoVenta, Gasto
 from inventario.models import EntradaMercancia
 from productos.models import Producto
@@ -23,8 +23,8 @@ class Command(BaseCommand):
         self.stdout.write("Procesando limpieza de datos de prueba...")
         
         # Eliminar siempre transacciones financieras de prueba
-        DesgloseVentaFIFO.objects.all().delete()
-        ItemVenta.objects.all().delete()
+        DesgloseLoteVenta.objects.all().delete()
+        DetalleVenta.objects.all().delete()
         PagoVenta.objects.all().delete()
         Venta.objects.all().delete()
         Gasto.objects.all().delete()
