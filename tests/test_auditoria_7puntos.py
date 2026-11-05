@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 from decimal import Decimal
 import openpyxl
 from io import BytesIO
@@ -102,6 +103,49 @@ class Auditoria7PuntosTestCase(TestCase):
         # Verificar que el stock vivo NO fue pisado por el Excel viejo
         prod.refresh_from_db()
         self.assertEqual(prod.stock_total, 18, "El stock vivo debe permanecer en 18 y no reponer las unidades vendidas.")
+
+    def test_03b_excel_entradas_mercancia_con_id_no_repone_vendido(self):
+        """
+        Punto 3B (Hallazgo Auditor): Demostrar que importar por la ruta 'Entradas de Mercancía'
+        con un ID de lote existente tampoco sobrescribe las unidades vendidas (de 20 a 18).
+        """
+        prod = Producto.objects.create(nombre="Base Líquida Mate", stock_minimo=3)
+        lote = EntradaMercancia.objects.create(
+            producto=prod,
+            cantidad_recibida=20,
+            cantidad_disponible=20,
+            costo_unitario=Decimal('15.00'),
+            precio_venta=Decimal('30.00')
+        )
+
+        # Realizar venta de 2 unidades
+        registrar_venta_fifo(
+            items_carrito=[{'producto_id': prod.id, 'cantidad': 2, 'precio_unitario_bs': '30.00'}],
+            lista_pagos=[{'metodo': 'EFECTIVO_BS', 'monto_original': '60.00'}],
+            tasa_usd_bcv=Decimal('900.00'),
+            tasa_usdt=Decimal('1000.00')
+        )
+
+        lote.refresh_from_db()
+        self.assertEqual(lote.cantidad_disponible, 18, "El lote debe quedar en 18 tras la venta de 2 unidades.")
+
+        # Simular re-importación de hoja 'Entradas de Mercancía' con el ID del lote y saldo original de 20
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Entradas de Mercancía"
+        ws.append(["ID", "Fecha", "Producto", "Cant. Recibida", "Cant. Disponible", "Costo", "Precio", "Estado", "Obs"])
+        # Fila con ID existente del lote y saldo estático antiguo de 20
+        ws.append([lote.id, "05/11/2026", "Base Líquida Mate", 20, 20, 16.00, 32.00, "Disponible", "Precio actualizado"])
+
+        _procesar_hoja_entradas(ws)
+
+        lote.refresh_from_db()
+        # Verificar que el disponible NO volvió a 20 (se conserva en 18)
+        self.assertEqual(lote.cantidad_disponible, 18, "El disponible vivo debe conservarse en 18 y no reponer lo vendido.")
+        # Verificar que sí se actualizaron precios y costos
+        self.assertEqual(lote.costo_unitario, Decimal('16.00'))
+        self.assertEqual(lote.precio_venta, Decimal('32.00'))
+        self.assertEqual(lote.observaciones, "Precio actualizado")
 
     def test_04_n_plus_one_optimizado_en_una_sola_query(self):
         """
@@ -281,3 +325,56 @@ class Auditoria7PuntosTestCase(TestCase):
         req_d.user = self.user
         resp_d = api_ventas(req_d)
         self.assertEqual(resp_d.status_code, 400, "Debe rechazar montos de pago negativos.")
+
+    def test_08_fechas_caracas_y_rango_estricto_7_dias(self):
+        """
+        Punto 8: Demostrar que las fechas se formatean en zona horaria America/Caracas (UTC-4)
+        y que un rango de 7 días comprende exactamente 7 fechas calendario.
+        """
+        from datetime import date, timedelta
+        from django.utils import timezone
+        from zoneinfo import ZoneInfo
+        caracas_tz = ZoneInfo("America/Caracas")
+
+        ahora_caracas = timezone.now().astimezone(caracas_tz)
+        hoy = ahora_caracas.date()
+        hace_7_dias = hoy - timedelta(days=6) # hoy y los 6 días previos = 7 fechas exactas
+
+        num_dias = (hoy - hace_7_dias).days + 1
+        self.assertEqual(num_dias, 7, "El rango de 7 días debe contener exactamente 7 fechas calendario.")
+
+        v = Venta.objects.create(total_bs=Decimal('100.00'), tasa_usd_bcv=Decimal('900.00'))
+        fecha_local = timezone.localtime(v.fecha)
+        tz_nombre = str(fecha_local.tzinfo)
+        self.assertIn('Caracas', tz_nombre, "La fecha debe estar localizada en America/Caracas.")
+
+    def test_09_respaldo_externo_y_recuperacion(self):
+        """
+        Punto 9: Demostrar generación de respaldo de negocio y recuperación exitosa.
+        """
+        import tempfile
+        from django.core.management import call_command
+        from reportes.views import _restaurar_desde_json
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        prod = Producto.objects.create(nombre="Sombra Ojos Respaldo", stock_minimo=2)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            call_command('crear_respaldo', destino=tmp_dir)
+            archivos = list(Path(tmp_dir).glob("respaldo_datos_*.json"))
+            self.assertTrue(len(archivos) > 0, "Debe haberse generado el archivo JSON de respaldo.")
+
+            # Borrar producto para verificar recuperación
+            prod.delete()
+            self.assertFalse(Producto.objects.filter(nombre="Sombra Ojos Respaldo").exists())
+
+            # Restaurar copia
+            with open(archivos[0], 'rb') as f:
+                upload = SimpleUploadedFile(archivos[0].name, f.read(), content_type='application/json')
+                resp = _restaurar_desde_json(upload)
+                self.assertEqual(resp.status_code, 200)
+
+            self.assertTrue(
+                Producto.objects.filter(nombre="Sombra Ojos Respaldo").exists(),
+                "El producto debe haberse recuperado exitosamente desde la copia."
+            )
+

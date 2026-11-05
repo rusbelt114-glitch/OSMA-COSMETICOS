@@ -42,7 +42,7 @@ def api_reporte_resumen(request):
         medios_str = " + ".join(p.get_metodo_display() for p in v.pagos.all())
         ventas_data.append({
             'codigo': v.codigo,
-            'fecha': v.fecha.strftime("%d/%m/%Y %H:%M"),
+            'fecha': timezone.localtime(v.fecha).strftime("%d/%m/%Y %H:%M"),
             'total_bs': float(v.total_bs),
             'costo_total_bs': float(v.costo_total_bs),
             'ganancia_bruta_bs': float(v.ganancia_bruta_bs),
@@ -243,18 +243,22 @@ def _procesar_hoja_entradas(ws):
             entrada_existente = EntradaMercancia.objects.filter(id=int(row[0]), producto=prod).first()
 
         if entrada_existente:
-            # Solo actualizar el lote específico si existe en el sistema
-            entrada_existente.cantidad_recibida = cant_recibida
-            entrada_existente.cantidad_disponible = cant_disponible
+            # En importación ordinaria de mercancía, NO se sobreescribe la cantidad_disponible viva del lote
+            # para evitar reponer mercancía que ya fue vendida por FIFO.
+            # Solo se actualizan precios, costos y observaciones.
             entrada_existente.costo_unitario = costo_unit
             entrada_existente.precio_venta = precio_venta
-            entrada_existente.save()
+            if obs:
+                entrada_existente.observaciones = obs
+            entrada_existente.save(update_fields=['costo_unitario', 'precio_venta', 'observaciones'])
         else:
             # Nuevo lote independiente (conserva lotes múltiples: 5 + 7 = 12)
+            # Para un lote nuevo, su stock disponible inicial es la cantidad recibida
+            disp_inicial = min(cant_disponible, cant_recibida) if cant_disponible > 0 else cant_recibida
             EntradaMercancia.objects.create(
                 producto=prod,
                 cantidad_recibida=cant_recibida,
-                cantidad_disponible=cant_disponible,
+                cantidad_disponible=disp_inicial,
                 costo_unitario=costo_unit,
                 precio_venta=precio_venta,
                 observaciones=obs

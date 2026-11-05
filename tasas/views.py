@@ -1,5 +1,6 @@
 import json
 from decimal import Decimal
+from django.utils import timezone
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.contrib.auth.decorators import login_required
@@ -13,7 +14,7 @@ def api_tasas(request):
     tasa_usdt = HistorialTasa.obtener_ultima_tasa('USDT')
 
     ultima_bcv_obj = HistorialTasa.objects.filter(tipo='USD_BCV').order_by('-fecha').first()
-    fecha_bcv = ultima_bcv_obj.fecha.strftime("%d/%m/%Y %H:%M") if ultima_bcv_obj else ""
+    fecha_bcv = timezone.localtime(ultima_bcv_obj.fecha).strftime("%d/%m/%Y %H:%M") if ultima_bcv_obj else ""
 
     return JsonResponse({
         'usd_bcv': float(tasa_bcv),

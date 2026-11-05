@@ -1,5 +1,6 @@
 import json
 from decimal import Decimal
+from django.utils import timezone
 from django.http import JsonResponse
 from django.core.exceptions import ValidationError
 from django.views.decorators.http import require_http_methods
@@ -16,7 +17,7 @@ def api_ventas(request):
         for v in ventas:
             data.append({
                 'codigo': v.codigo,
-                'fecha': v.fecha.strftime("%d/%m/%Y %H:%M"),
+                'fecha': timezone.localtime(v.fecha).strftime("%d/%m/%Y %H:%M"),
                 'total_bs': float(v.total_bs),
                 'costo_total_bs': float(v.costo_total_bs),
                 'ganancia_bruta_bs': float(v.ganancia_bruta_bs),

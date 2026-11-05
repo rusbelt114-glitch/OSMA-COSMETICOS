@@ -173,7 +173,7 @@ def generar_excel_completo(desde_dt=None, hasta_dt=None):
     for e in entradas:
         ws_ent.append([
             e.id,
-            e.fecha_entrada.strftime("%d/%m/%Y %H:%M"),
+            timezone.localtime(e.fecha_entrada).strftime("%d/%m/%Y %H:%M"),
             e.producto.nombre,
             e.cantidad_recibida,
             e.cantidad_disponible,
@@ -208,7 +208,7 @@ def generar_excel_completo(desde_dt=None, hasta_dt=None):
     for v in ventas:
         ws_ven.append([
             v.codigo,
-            v.fecha.strftime("%d/%m/%Y %H:%M"),
+            timezone.localtime(v.fecha).strftime("%d/%m/%Y %H:%M"),
             float(v.total_bs),
             float(v.costo_total_bs),
             float(v.ganancia_bruta_bs),
@@ -241,7 +241,7 @@ def generar_excel_completo(desde_dt=None, hasta_dt=None):
     for p in pagos:
         ws_pag.append([
             p.venta.codigo,
-            p.venta.fecha.strftime("%d/%m/%Y %H:%M"),
+            timezone.localtime(p.venta.fecha).strftime("%d/%m/%Y %H:%M"),
             p.get_metodo_display(),
             float(p.monto_original),
             p.moneda,

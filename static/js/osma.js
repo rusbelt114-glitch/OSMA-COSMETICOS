@@ -871,11 +871,12 @@
     document.querySelectorAll('[data-period]').forEach(btn => {
         btn.onclick = () => {
             const p = btn.dataset.period;
-            const now = new Date();
+            // Obtener fecha actual en zona horaria de Caracas (America/Caracas - UTC-4)
+            const caracasNow = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Caracas" }));
             const pad = n => String(n).padStart(2, '0');
             const toStr = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
-            const today = toStr(now);
+            const today = toStr(caracasNow);
             $('to-date').value = today;
 
             if (p === 'all') {
@@ -884,12 +885,13 @@
             } else if (p === 'today') {
                 $('from-date').value = today;
             } else if (p === 'week') {
-                const past = new Date(now);
-                past.setDate(past.getDate() - 7);
+                // Filtro estricto de 7 días: hoy y los 6 días previos (exactamente 7 fechas en el rango)
+                const past = new Date(caracasNow);
+                past.setDate(past.getDate() - 6);
                 $('from-date').value = toStr(past);
             } else if (p === 'half') {
-                const day = now.getDate();
-                const past = new Date(now);
+                const day = caracasNow.getDate();
+                const past = new Date(caracasNow);
                 if (day > 15) {
                     past.setDate(16);
                 } else {
@@ -897,7 +899,7 @@
                 }
                 $('from-date').value = toStr(past);
             } else if (p === 'month') {
-                const past = new Date(now.getFullYear(), now.getMonth(), 1);
+                const past = new Date(caracasNow.getFullYear(), caracasNow.getMonth(), 1);
                 $('from-date').value = toStr(past);
             }
             void loadReport();

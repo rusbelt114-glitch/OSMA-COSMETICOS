@@ -22,6 +22,34 @@ def sincronizar_tasas_en_linea():
         'mensaje': ''
     }
 
+    # 1. Intentar obtener USDT real de Binance P2P
+    tasa_usdt_real = None
+    fuente_usdt = ""
+    try:
+        binance_payload = json.dumps({
+            'asset': 'USDT',
+            'fiat': 'VES',
+            'merchantCheck': True,
+            'page': 1,
+            'rows': 5,
+            'tradeType': 'BUY'
+        }).encode('utf-8')
+        req_b = urllib.request.Request(
+            'https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search',
+            data=binance_payload,
+            headers={'User-Agent': 'Mozilla/5.0', 'Content-Type': 'application/json'}
+        )
+        with urllib.request.urlopen(req_b, timeout=4) as b_resp:
+            if b_resp.status == 200:
+                b_data = json.loads(b_resp.read().decode('utf-8'))
+                advs = b_data.get('data', [])
+                if advs and advs[0].get('adv', {}).get('price'):
+                    tasa_usdt_real = Decimal(str(advs[0]['adv']['price']))
+                    fuente_usdt = 'Binance P2P (USDT)'
+    except Exception as e_binance:
+        logger.info(f"Binance P2P no disponible ({e_binance}), se usará mercado alternativo para USDT.")
+
+    # 2. Consultar DolarApi para BCV Oficial y fallback de mercado
     try:
         req = urllib.request.Request(
             DOLAR_API_URL, 
@@ -43,17 +71,26 @@ def sincronizar_tasas_en_linea():
                     )
                     resultados['usd_bcv'] = tasa_val
 
-                # Buscar paralelo como base de mercado / USDT
-                paralelo = next((item for item in data if item.get('fuente') == 'paralelo'), None)
-                if paralelo and paralelo.get('promedio'):
-                    tasa_val = Decimal(str(paralelo['promedio']))
+                # Registrar USDT: priorizar Binance P2P real sobre DolarApi paralelo
+                if tasa_usdt_real:
                     HistorialTasa.objects.create(
                         tipo='USDT',
-                        valor=tasa_val,
-                        fuente='Mercado/Paralelo (DolarApi)',
+                        valor=tasa_usdt_real,
+                        fuente=fuente_usdt,
                         es_manual=False
                     )
-                    resultados['usdt'] = tasa_val
+                    resultados['usdt'] = tasa_usdt_real
+                else:
+                    paralelo = next((item for item in data if item.get('fuente') == 'paralelo'), None)
+                    if paralelo and paralelo.get('promedio'):
+                        tasa_val = Decimal(str(paralelo['promedio']))
+                        HistorialTasa.objects.create(
+                            tipo='USDT',
+                            valor=tasa_val,
+                            fuente='Mercado Paralelo (DolarApi - Contingencia)',
+                            es_manual=False
+                        )
+                        resultados['usdt'] = tasa_val
 
                 resultados['exito'] = True
                 resultados['mensaje'] = 'Tasas actualizadas exitosamente desde el BCV y mercado.'
