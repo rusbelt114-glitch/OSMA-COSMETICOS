@@ -3,9 +3,11 @@ from django.shortcuts import render, redirect
 from django.contrib.auth import logout as auth_logout, login as auth_login
 from django.contrib.auth.models import User
 from django.contrib.auth.decorators import login_required
+from django.views.decorators.cache import never_cache
 from tasas.models import HistorialTasa
 
 @login_required
+@never_cache
 def dashboard_view(request):
     tasa_usd = HistorialTasa.obtener_ultima_tasa('USD_BCV')
     tasa_usdt = HistorialTasa.obtener_ultima_tasa('USDT')
@@ -20,6 +22,7 @@ def dashboard_view(request):
         'tasa_usdt': tasa_usdt
     })
 
+@never_cache
 def custom_login_view(request):
     """
     Acceso ultra rápido por clave directa de tienda con auto-inicialización en la nube.
