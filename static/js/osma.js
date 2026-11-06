@@ -524,24 +524,27 @@
         const searchVal = norm($('sell-search').value);
         if (!select) return;
 
-        const filteredLots = availableLots.filter(l => norm(l.producto_nombre).includes(searchVal));
+        // Opción 1: Unificar por producto mostrando el stock total acumulado de todos los lotes
+        const availableProds = allProducts.filter(p => p.activo && p.stock_total > 0 && norm(p.nombre).includes(searchVal));
 
-        if (!filteredLots.length) {
+        if (!availableProds.length) {
             select.innerHTML = '<option value="">No hay productos disponibles en inventario</option>';
             $('sell-unit-price').value = '';
+            if ($('sell-unit-price-usd')) $('sell-unit-price-usd').value = '';
             return;
         }
 
-        select.innerHTML = filteredLots.map(l => 
-            `<option value="${l.lote_id}" data-price="${l.precio_venta}" data-prod="${l.producto_id}" data-max="${l.cantidad_disponible}">
-                ${esc(l.producto_nombre)} · ${l.cantidad_disponible} disp. (${l.fecha_hora_12h || l.fecha}) - Bs ${fmt(l.precio_venta)}
-            </option>`
-        ).join('');
+        const rBcv = getBcvRate();
+        select.innerHTML = availableProds.map(p => {
+            const precioUsd = rBcv > 0 ? (p.ultimo_precio / rBcv) : 0;
+            return `<option value="${p.id}" data-price="${p.ultimo_precio}" data-prod="${p.id}" data-max="${p.stock_total}">
+                ${esc(p.nombre)} · ${p.stock_total} disp. en total - Bs ${fmt(p.ultimo_precio)} (≈ USD $ ${fmt(precioUsd)})
+            </option>`;
+        }).join('');
 
         const selectedOpt = select.options[select.selectedIndex];
         if (selectedOpt && selectedOpt.dataset.price) {
             const pBs = Number(selectedOpt.dataset.price);
-            const rBcv = getBcvRate();
             $('sell-unit-price').value = pBs.toFixed(2).replace('.', ',');
             if ($('sell-unit-price-usd')) $('sell-unit-price-usd').value = rBcv > 0 ? (pBs / rBcv).toFixed(2).replace('.', ',') : '';
         }
@@ -582,17 +585,16 @@
         };
     }
 
-    function _agregarLoteAlCarrito(opt, unidades, precioUnitario) {
-        const loteId = Number(opt.value);
-        const prodId = Number(opt.dataset.prod);
+    function _agregarProductoAlCarrito(opt, unidades, precioUnitario) {
+        const prodId = Number(opt.dataset.prod || opt.value);
         const maxAvailable = Number(opt.dataset.max);
         const prodName = opt.text.split('·')[0].trim();
 
-        const existing = cart.find(x => x.lote_id === loteId);
+        const existing = cart.find(x => x.producto_id === prodId);
         const currentQtyInCart = existing ? existing.cantidad : 0;
 
         if ((currentQtyInCart + unidades) > maxAvailable) {
-            info(`Solo quedan ${maxAvailable} unidades disponibles en este lote. Tienes ${currentQtyInCart} en la venta.`, true);
+            info(`Solo quedan ${maxAvailable} unidades disponibles en total de "${prodName}". Tienes ${currentQtyInCart} en la venta actual.`, true);
             return false;
         }
 
@@ -602,7 +604,6 @@
         } else {
             cart.push({
                 producto_id: prodId,
-                lote_id: loteId,
                 nombre: prodName,
                 cantidad: unidades,
                 precio_unitario_bs: precioUnitario
@@ -631,7 +632,7 @@
             return;
         }
 
-        const agregado = _agregarLoteAlCarrito(opt, unidades, precioUnitario);
+        const agregado = _agregarProductoAlCarrito(opt, unidades, precioUnitario);
         if (!agregado) return;
 
         // Congelar tasas de la venta activa
