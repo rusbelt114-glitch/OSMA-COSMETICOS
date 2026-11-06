@@ -1428,7 +1428,7 @@
             }
 
             const promptMsg = isJson 
-                ? `¿Estás seguro de restaurar la base de datos completa desde "${filename}"?\n\nSe recuperarán productos, existencias y ventas anteriores.` 
+                ? `¿Estás seguro de restaurar la copia de seguridad completa desde "${filename}"?\n\nSe recuperarán productos, existencias y ventas anteriores.` 
                 : `¿Deseas importar/recuperar productos y existencias desde el archivo Excel "${filename}"?`;
 
             if (!confirm(promptMsg)) {

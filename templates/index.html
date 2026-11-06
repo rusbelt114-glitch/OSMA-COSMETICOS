@@ -16,11 +16,11 @@
             <small>COSMETICS</small>
         </div>
         <div class="headnote">
-            <span class="fixed-badge">Sistema Central Conectado</span>
-            <p>Gestión de Tienda · Base de Datos Central</p>
+            <span class="fixed-badge">Sistema Activo</span>
+            <p>Osma Cosmetics · Punto de Venta</p>
             <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 5px; flex-wrap: wrap; align-items: center;">
                 <input type="file" id="global-restore-file" accept=".json,.xlsx" style="display: none;">
-                <button type="button" class="button secondary" id="btn-restore-header" style="padding: 6px 12px; font-size: .82rem;" title="Restaurar base de datos o inventario desde un archivo de respaldo o Excel">
+                <button type="button" class="button secondary" id="btn-restore-header" style="padding: 6px 12px; font-size: .82rem;" title="Restaurar inventario desde un archivo de respaldo o Excel">
                     ↻ Restaurar copia
                 </button>
                 <a href="{% url 'descargar_copia_seguridad' %}" class="button" style="padding: 6px 14px; font-size: .82rem; font-weight: 600; background: #376d5e; color: #ffffff; border: none; border-radius: 8px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.12);" title="Descargar copia de seguridad completa (.json)">
@@ -177,7 +177,7 @@
                 <div class="eyebrow">02 · atención</div>
                 <h2>Registrar venta</h2>
             </div>
-            <span class="muted">Deducción automática por FIFO</span>
+            <span class="muted">Control automático de inventario</span>
         </div>
         <div class="layout">
             <div class="card">
@@ -219,8 +219,8 @@
                     </div>
                     <span class="amount" id="sale-total" style="font-size: 1.4rem;">Bs 0,00</span>
                 </div>
-                <h3>Pago compartido multi-moneda</h3>
-                <p class="muted">Combina los medios que use la cliente. Tasa congelada en esta venta.</p>
+                <h3>Métodos de pago (Cobro Mixto)</h3>
+                <p class="muted">Combina los medios de pago que use el cliente (efectivo, punto, pago móvil, divisa).</p>
                 <div class="fields">
                     <label>Efectivo · Bs<input id="pay-bs" inputmode="decimal" value="0" placeholder="0,00"></label>
                     <label>Pago móvil · Bs<input id="pay-mobile" inputmode="decimal" value="0" placeholder="0,00"></label>
@@ -405,7 +405,7 @@
                 <h2>Alertas y análisis</h2>
             </div>
             <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                <a href="{% url 'descargar_copia_seguridad' %}" class="button secondary" title="Descargar base de datos completa en JSON">💾 Copia de seguridad</a>
+                <a href="{% url 'descargar_copia_seguridad' %}" class="button secondary" title="Descargar copia de seguridad completa (.json)">💾 Copia de seguridad</a>
                 <a href="{% url 'descargar_excel_reporte' %}" class="button secondary" id="download-report-excel">↓ Descargar Excel</a>
                 <button type="button" class="button secondary" id="btn-restore-tab4" title="Restaurar inventario desde archivo .json o .xlsx">↻ Restaurar desde archivo</button>
             </div>
@@ -443,7 +443,7 @@
                     <small><span id="sold-count">0</span> unidades vendidas</small>
                 </div>
                 <div class="metric">
-                    <small>Costo de lo Vendido (FIFO)</small>
+                    <small>Costo de lo Vendido</small>
                     <strong id="cost-value" style="color: #666;">Bs 0,00</strong>
                     <small>Costo histórico de mercancía vendida</small>
                 </div>
@@ -533,11 +533,11 @@
             <div style="display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px;">
                 <div>
                     <h3 style="margin: 0; color: #b3382c;">⚙️ Preparación y Limpieza de Datos (Empezar de 0)</h3>
-                    <span class="muted">Herramientas para limpiar pruebas y entregar el sistema 100% listo al negocio.</span>
+                    <span class="muted">Herramientas para reiniciar pruebas y dejar el sistema 100% listo para ventas reales.</span>
                 </div>
             </div>
             <p style="margin-top: 10px; font-size: 0.88rem; color: #555;">
-                Si realizaste pruebas con ventas, gastos o productos ficticios, utiliza estas opciones para dejar la base de datos limpia:
+                Si realizaste pruebas con ventas, gastos o productos ficticios, utiliza estas opciones para dejar el sistema limpio:
             </p>
             <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px;">
                 <button type="button" class="secondary" id="btn-reset-sales-only" style="border-color: #8c52ff; color: #6a2cd8;">
@@ -551,8 +551,8 @@
     </section>
 
     <footer class="foot">
-        <span>Osma Cosmetics · Versión operativa centralizada con PostgreSQL / Django</span>
-        <span class="muted">Caja compartida para tienda</span>
+        <span>Osma Cosmetics · Sistema de Inventario y Ventas</span>
+        <span class="muted">Tienda Principal</span>
     </footer>
 </main>
 
