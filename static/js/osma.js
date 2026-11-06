@@ -1249,11 +1249,44 @@
             // Bloque A · Métricas del período
             if ($('sold-count')) $('sold-count').textContent = data.total_unidades_vendidas || 0;
             if ($('sales-value')) $('sales-value').textContent = 'Bs ' + fmt(data.total_ingresos);
+            if ($('sales-value-usd')) $('sales-value-usd').textContent = '≈ USD $ ' + fmt(data.total_ingresos_usd || 0);
+
             if ($('cost-value')) $('cost-value').textContent = 'Bs ' + fmt(data.total_costos || 0);
+            if ($('cost-value-usd')) $('cost-value-usd').textContent = '≈ USD $ ' + fmt(data.total_costos_usd || 0);
+
             if ($('profit-value')) $('profit-value').textContent = 'Bs ' + fmt(data.total_ganancia);
+            if ($('profit-value-usd')) $('profit-value-usd').textContent = '≈ USD $ ' + fmt(data.total_ganancia_usd || 0);
+
             if ($('expenses-store-metric')) $('expenses-store-metric').textContent = 'Bs ' + fmt(data.total_gastos_tienda || 0);
+            if ($('expenses-store-metric-usd')) $('expenses-store-metric-usd').textContent = '≈ USD $ ' + fmt(data.total_gastos_tienda_usd || 0);
+
             if ($('net-profit-value')) $('net-profit-value').textContent = 'Bs ' + fmt(data.resultado_despues_gastos || data.ganancia_neta_real || 0);
+            if ($('net-profit-value-usd')) $('net-profit-value-usd').textContent = '≈ USD $ ' + fmt(data.resultado_despues_gastos_usd || data.ganancia_neta_real_usd || 0);
+
             if ($('expenses-personal-metric')) $('expenses-personal-metric').textContent = 'Bs ' + fmt(data.total_gastos_personal || 0);
+            if ($('expenses-personal-metric-usd')) $('expenses-personal-metric-usd').textContent = '≈ USD $ ' + fmt(data.total_gastos_personal_usd || 0);
+
+            // Saldo Final en Caja / Negocio (Ganancia libre menos retiros personales)
+            const saldoCaja = data.saldo_caja_real !== undefined ? data.saldo_caja_real : ((data.resultado_despues_gastos || 0) - (data.total_gastos_personal || 0));
+            const saldoCajaUsd = data.saldo_caja_real_usd !== undefined ? data.saldo_caja_real_usd : ((data.resultado_despues_gastos_usd || 0) - (data.total_gastos_personal_usd || 0));
+
+            if ($('balance-real-metric')) {
+                $('balance-real-metric').textContent = (saldoCaja < 0 ? '- Bs ' : 'Bs ') + fmt(Math.abs(saldoCaja));
+                $('balance-real-metric').style.color = saldoCaja >= 0 ? '#1a4d40' : '#b3382c';
+            }
+            if ($('balance-real-metric-usd')) {
+                $('balance-real-metric-usd').textContent = '≈ ' + (saldoCajaUsd < 0 ? '- USD $ ' : 'USD $ ') + fmt(Math.abs(saldoCajaUsd));
+                $('balance-real-metric-usd').style.color = saldoCajaUsd >= 0 ? '#1a4d40' : '#b3382c';
+            }
+            if ($('box-balance-real')) {
+                $('box-balance-real').style.borderColor = saldoCaja >= 0 ? '#376d5e' : '#b3382c';
+                $('box-balance-real').style.background = saldoCaja >= 0 ? '#f4fbf8' : '#fff5f5';
+            }
+            if ($('balance-real-note')) {
+                $('balance-real-note').textContent = saldoCaja >= 0 
+                    ? '✓ Ganancia restante en caja a favor del negocio' 
+                    : '⚠️ Retiraste más dinero del que ganó la tienda';
+            }
 
             if ($('period-info')) $('period-info').textContent = `${data.num_ventas} venta(s) registradas en este período.`;
 
@@ -1262,8 +1295,22 @@
                 if ($('inv-consult-date')) $('inv-consult-date').textContent = `Al corte de: ${data.inventario_actual.fecha_consulta}`;
                 if ($('inv-active-prods')) $('inv-active-prods').textContent = data.inventario_actual.total_productos_activos || 0;
                 if ($('inv-total-units')) $('inv-total-units').textContent = data.inventario_actual.unidades_disponibles || 0;
+
                 if ($('inv-cost-value')) $('inv-cost-value').textContent = 'Bs ' + fmt(data.inventario_actual.inversion_existencias || 0);
+                if ($('inv-cost-value-usd')) $('inv-cost-value-usd').textContent = '≈ USD $ ' + fmt(data.inventario_actual.inversion_existencias_usd || 0);
+
                 if ($('inv-potential-sale')) $('inv-potential-sale').textContent = 'Bs ' + fmt(data.inventario_actual.venta_potencial || 0);
+                if ($('inv-potential-sale-usd')) $('inv-potential-sale-usd').textContent = '≈ USD $ ' + fmt(data.inventario_actual.venta_potencial_usd || 0);
+
+                const gananciaInv = data.inventario_actual.ganancia_potencial !== undefined 
+                    ? data.inventario_actual.ganancia_potencial 
+                    : ((data.inventario_actual.venta_potencial || 0) - (data.inventario_actual.inversion_existencias || 0));
+                const gananciaInvUsd = data.inventario_actual.ganancia_potencial_usd !== undefined 
+                    ? data.inventario_actual.ganancia_potencial_usd 
+                    : ((data.inventario_actual.venta_potencial_usd || 0) - (data.inventario_actual.inversion_existencias_usd || 0));
+
+                if ($('inv-potential-profit')) $('inv-potential-profit').textContent = 'Bs ' + fmt(gananciaInv);
+                if ($('inv-potential-profit-usd')) $('inv-potential-profit-usd').textContent = '≈ USD $ ' + fmt(gananciaInvUsd);
             }
 
             // Productos vendidos

@@ -435,37 +435,49 @@
         <!-- A · Resumen financiero del período seleccionado -->
         <div class="card" style="margin-top: 14px;">
             <h3>A · Resumen Financiero del Período Seleccionado</h3>
-            <p class="muted">Cálculo contable exacto sobre las ventas y gastos del período filtrado.</p>
+            <p class="muted">Cálculo claro y directo en Bolívares y Dólares de las ventas, costos, gastos de tienda y retiros del dueño.</p>
             <div class="metrics" style="margin-top: 10px;">
                 <div class="metric">
-                    <small>Ventas Totales</small>
+                    <small>Total Vendido (Ingresos)</small>
                     <strong id="sales-value">Bs 0,00</strong>
+                    <div id="sales-value-usd" style="font-size: 0.95rem; font-weight: 600; color: #2d5a4c; margin: 3px 0;">≈ USD $ 0,00</div>
                     <small><span id="sold-count">0</span> unidades vendidas</small>
                 </div>
                 <div class="metric">
-                    <small>Costo de lo Vendido</small>
+                    <small>Inversión en lo Vendido (Costo)</small>
                     <strong id="cost-value" style="color: #666;">Bs 0,00</strong>
-                    <small>Costo histórico de mercancía vendida</small>
+                    <div id="cost-value-usd" style="font-size: 0.95rem; font-weight: 600; color: #666; margin: 3px 0;">≈ USD $ 0,00</div>
+                    <small>Lo que costó comprar los productos vendidos</small>
                 </div>
                 <div class="metric">
-                    <small>Ganancia Bruta</small>
+                    <small>Ganancia sobre Ventas</small>
                     <strong id="profit-value" style="color: #376d5e;">Bs 0,00</strong>
-                    <small>Ventas − Costo de lo vendido</small>
+                    <div id="profit-value-usd" style="font-size: 0.95rem; font-weight: 600; color: #376d5e; margin: 3px 0;">≈ USD $ 0,00</div>
+                    <small>Total Vendido − Inversión en mercancía</small>
                 </div>
                 <div class="metric">
-                    <small>Gastos Operativos (Tienda)</small>
+                    <small>Gastos de la Tienda (Operativo)</small>
                     <strong id="expenses-store-metric" style="color: #b3382c;">Bs 0,00</strong>
-                    <small>Alquiler, bolsas, luz, servicios</small>
+                    <div id="expenses-store-metric-usd" style="font-size: 0.95rem; font-weight: 600; color: #b3382c; margin: 3px 0;">≈ USD $ 0,00</div>
+                    <small>Alquiler, bolsas, comida, luz, servicios</small>
                 </div>
                 <div class="metric">
-                    <small>Resultado después de Gastos</small>
+                    <small>Ganancia Libre de la Tienda</small>
                     <strong id="net-profit-value" style="color: #1a4d40;">Bs 0,00</strong>
-                    <small>Ganancia bruta − Gastos operativos</small>
+                    <div id="net-profit-value-usd" style="font-size: 0.95rem; font-weight: 600; color: #1a4d40; margin: 3px 0;">≈ USD $ 0,00</div>
+                    <small>Ganancia de ventas − Gastos de tienda</small>
                 </div>
                 <div class="metric">
-                    <small>Retiros Personales (Dueño)</small>
+                    <small>Retiros del Dueño (Gastos Personales)</small>
                     <strong id="expenses-personal-metric" style="color: #8c52ff;">Bs 0,00</strong>
-                    <small>Informados por separado (no restan ganancia)</small>
+                    <div id="expenses-personal-metric-usd" style="font-size: 0.95rem; font-weight: 600; color: #8c52ff; margin: 3px 0;">≈ USD $ 0,00</div>
+                    <small>Dinero que el dueño sacó para su bolsillo</small>
+                </div>
+                <div class="metric" id="box-balance-real" style="border: 2px solid #376d5e; background: #f4fbf8;">
+                    <small>Saldo Final en Caja / Negocio</small>
+                    <strong id="balance-real-metric" style="color: #1a4d40;">Bs 0,00</strong>
+                    <div id="balance-real-metric-usd" style="font-size: 1rem; font-weight: 700; color: #1a4d40; margin: 3px 0;">≈ USD $ 0,00</div>
+                    <small id="balance-real-note">Ganancia libre − Retiros del dueño</small>
                 </div>
             </div>
         </div>
@@ -474,34 +486,42 @@
         <div class="card" style="margin-top: 14px; background: #fafaf8;">
             <div style="display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px;">
                 <div>
-                    <h3 style="margin: 0;">B · Estado del Inventario Actual</h3>
+                    <h3 style="margin: 0;">B · Estado del Inventario Actual (En Estantes / Almacén)</h3>
                     <span class="muted" id="inv-consult-date">Al corte del momento actual</span>
                 </div>
             </div>
             <div class="metrics" style="margin-top: 10px;">
                 <div class="metric">
-                    <small>Productos Activos</small>
+                    <small>Variedad de Productos</small>
                     <strong id="inv-active-prods">0</strong>
-                    <small>Artículos en catálogo</small>
+                    <small>Modelos / tonos en catálogo</small>
                 </div>
                 <div class="metric">
                     <small>Unidades en Existencia</small>
                     <strong id="inv-total-units">0</strong>
-                    <small>Stock total en almacén</small>
+                    <small>Piezas físicas para vender</small>
                 </div>
                 <div class="metric">
-                    <small>Inversión en Existencias</small>
+                    <small>Inversión en Inventario (Costo)</small>
                     <strong id="inv-cost-value">Bs 0,00</strong>
-                    <small>Costo histórico de mercancía restante</small>
+                    <div id="inv-cost-value-usd" style="font-size: 0.95rem; font-weight: 600; color: #666; margin: 3px 0;">≈ USD $ 0,00</div>
+                    <small>Dinero invertido en comprar la mercancía actual</small>
                 </div>
                 <div class="metric">
-                    <small>Venta Potencial</small>
+                    <small>Venta Total Esperada</small>
                     <strong id="inv-potential-sale" style="color: #2b5c4f;">Bs 0,00</strong>
-                    <small>Valor proyectado a precio de venta</small>
+                    <div id="inv-potential-sale-usd" style="font-size: 0.95rem; font-weight: 600; color: #2b5c4f; margin: 3px 0;">≈ USD $ 0,00</div>
+                    <small>Total a cobrar si vendes todo el inventario</small>
+                </div>
+                <div class="metric" style="border: 2px solid #2b5c4f; background: #f2f9f6;">
+                    <small>Ganancia Total Esperada</small>
+                    <strong id="inv-potential-profit" style="color: #1a4d40;">Bs 0,00</strong>
+                    <div id="inv-potential-profit-usd" style="font-size: 1rem; font-weight: 700; color: #1a4d40; margin: 3px 0;">≈ USD $ 0,00</div>
+                    <small>Venta Esperada − Inversión (Ganancia limpia)</small>
                 </div>
             </div>
             <p class="muted" style="margin-top: 10px; font-size: 0.8rem;">
-                💡 <b>Nota contable:</b> La venta potencial representa el valor de las existencias a sus precios de venta registrados; no es dinero cobrado ni ganancia realizada. La inversión en existencias representa el costo de la mercancía restante disponible.
+                💡 <b>Resumen para el dueño:</b> Este bloque muestra todo el dinero invertido actualmente en mercancía y la ganancia total que te dejará al venderse por completo.
             </p>
         </div>
 

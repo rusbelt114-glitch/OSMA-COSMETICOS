@@ -10,6 +10,7 @@ from productos.models import Producto
 from inventario.models import EntradaMercancia
 from ventas.models import Venta, DetalleVenta
 from pagos.models import PagoVenta, Gasto
+from tasas.models import HistorialTasa
 
 def obtener_resumen_periodo(desde_dt=None, hasta_dt=None):
     """
@@ -79,8 +80,26 @@ def obtener_resumen_periodo(desde_dt=None, hasta_dt=None):
     total_gastos_personal = gastos_qs.filter(categoria='PERSONAL').aggregate(total=Sum('monto_equivalente_bs'))['total'] or Decimal('0.00')
     total_gastos_general = total_gastos_tienda + total_gastos_personal
 
-    # Resultado después de gastos operativos (Ganancia bruta menos gastos de la tienda)
+    # Resultado después de gastos operativos (Ganancia de ventas menos gastos de la tienda)
     resultado_despues_gastos = total_ganancia - total_gastos_tienda
+    # Saldo final real del negocio / caja (después de gastos de tienda y retiros personales del dueño)
+    saldo_caja_real = resultado_despues_gastos - total_gastos_personal
+
+    # Tasa para conversión a dólares USD
+    tasa_bcv = HistorialTasa.obtener_ultima_tasa('USD_BCV') or Decimal('896.12')
+    if tasa_bcv <= Decimal('0.00'):
+        tasa_bcv = Decimal('1.00')
+
+    def a_usd(monto_bs):
+        return (Decimal(str(monto_bs)) / tasa_bcv).quantize(Decimal('0.01'))
+
+    total_ingresos_usd = a_usd(total_ingresos)
+    total_costos_usd = a_usd(total_costos)
+    total_ganancia_usd = a_usd(total_ganancia)
+    total_gastos_tienda_usd = a_usd(total_gastos_tienda)
+    resultado_despues_gastos_usd = a_usd(resultado_despues_gastos)
+    total_gastos_personal_usd = a_usd(total_gastos_personal)
+    saldo_caja_real_usd = a_usd(saldo_caja_real)
 
     # Inventario actual (a la fecha y hora de la consulta, independiente del período de ventas)
     entradas_activas = EntradaMercancia.objects.filter(cantidad_disponible__gt=0, producto__activo=True)
@@ -92,6 +111,11 @@ def obtener_resumen_periodo(desde_dt=None, hasta_dt=None):
     total_uds_inv = inv_agregados['total_uds'] or 0
     inversion_existencias = inv_agregados['inversion_costo'] or Decimal('0.00')
     venta_potencial = inv_agregados['venta_potencial'] or Decimal('0.00')
+    ganancia_potencial = venta_potencial - inversion_existencias
+
+    inversion_existencias_usd = a_usd(inversion_existencias)
+    venta_potencial_usd = a_usd(venta_potencial)
+    ganancia_potencial_usd = a_usd(ganancia_potencial)
 
     productos_activos = Producto.objects.filter(activo=True)
     productos_alerta = []
@@ -109,12 +133,22 @@ def obtener_resumen_periodo(desde_dt=None, hasta_dt=None):
 
     return {
         'total_ingresos': total_ingresos,
+        'total_ingresos_usd': total_ingresos_usd,
         'total_costos': total_costos,
+        'total_costos_usd': total_costos_usd,
         'total_ganancia': total_ganancia,
+        'total_ganancia_usd': total_ganancia_usd,
         'total_gastos_tienda': total_gastos_tienda,
+        'total_gastos_tienda_usd': total_gastos_tienda_usd,
         'total_gastos_personal': total_gastos_personal,
+        'total_gastos_personal_usd': total_gastos_personal_usd,
         'total_gastos_general': total_gastos_general,
+        'total_gastos_general_usd': a_usd(total_gastos_general),
         'resultado_despues_gastos': resultado_despues_gastos,
+        'resultado_despues_gastos_usd': resultado_despues_gastos_usd,
+        'saldo_caja_real': saldo_caja_real,
+        'saldo_caja_real_usd': saldo_caja_real_usd,
+        'tasa_usd_bcv': tasa_bcv,
         'num_ventas': num_ventas,
         'total_unidades_vendidas': total_unidades_vendidas,
         'productos_vendidos': list(productos_vendidos),
@@ -125,8 +159,12 @@ def obtener_resumen_periodo(desde_dt=None, hasta_dt=None):
             'total_productos_activos': productos_activos.count(),
             'unidades_disponibles': total_uds_inv,
             'inversion_existencias': inversion_existencias,
+            'inversion_existencias_usd': inversion_existencias_usd,
             'venta_potencial': venta_potencial,
-            'nota': 'La venta potencial es el valor de las existencias a su precio de venta registrado, no es dinero cobrado ni ganancia realizada. La inversión en existencias representa el costo de la mercancía restante.'
+            'venta_potencial_usd': venta_potencial_usd,
+            'ganancia_potencial': ganancia_potencial,
+            'ganancia_potencial_usd': ganancia_potencial_usd,
+            'nota': 'La venta total esperada es el valor a precio de venta registrado, y la ganancia esperada es lo que dejará este inventario cuando se venda por completo.'
         },
         'ventas_listado': ventas_qs.prefetch_related('detalles__producto', 'pagos')[:100],
     }
