@@ -878,6 +878,13 @@
             if ($('product-count')) $('product-count').textContent = data.total_productos || 0;
             if ($('stock-count')) $('stock-count').textContent = data.unidades_disponibles || 0;
             if ($('stock-value')) $('stock-value').textContent = 'Bs ' + fmt(data.valor_venta_disponible);
+            if ($('stock-value-usd')) {
+                const bcvRate = data.tasa_usd_bcv || window.RATES?.usd_bcv || 1;
+                const usdVal = data.valor_venta_disponible_usd !== undefined 
+                    ? data.valor_venta_disponible_usd 
+                    : (bcvRate > 0 ? (data.valor_venta_disponible / bcvRate) : 0);
+                $('stock-value-usd').textContent = '≈ USD $ ' + fmt(usdVal);
+            }
         } catch (e) {
             console.error('Error cargando métricas:', e);
         }
@@ -905,12 +912,15 @@
                 estadoTexto = 'Reponer';
             }
 
+            const bcvRate = window.RATES?.usd_bcv || 1;
+            const precioUsd = bcvRate > 0 ? (p.ultimo_precio / bcvRate) : 0;
+
             return `
                 <div class="row" style="align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line);">
                     <div style="flex: 1; padding-right: 10px;">
                         <b class="product-title-wrap" style="display: block;">${esc(p.nombre)}</b>
                         <small style="display: block; color: var(--muted); margin-top: 3px;">
-                            ${p.stock_total} unidades disponibles · mínimo de alerta: ${p.stock_minimo} · Precio: Bs ${fmt(p.ultimo_precio)}
+                            ${p.stock_total} unidades disponibles · mínimo de alerta: ${p.stock_minimo} · Precio: Bs ${fmt(p.ultimo_precio)} <span style="color: #2b5c4f; font-weight: 600;">(≈ USD $ ${fmt(precioUsd)})</span>
                         </small>
                         <div class="track" style="margin-top: 6px;">
                             <div class="bar ${isLow ? 'warnbar' : ''}" style="width: ${barWidth}%"></div>

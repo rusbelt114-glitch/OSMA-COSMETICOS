@@ -11,6 +11,7 @@ import zoneinfo
 
 from productos.models import Producto, normalizar_texto
 from .models import EntradaMercancia
+from tasas.models import HistorialTasa
 
 CARACAS_TZ = zoneinfo.ZoneInfo("America/Caracas")
 
@@ -251,9 +252,21 @@ def api_metricas_inventario(request):
     total_valor_venta = float(agregados['total_valor_venta'] or 0)
     total_valor_costo = float(agregados['total_valor_costo'] or 0)
 
+    tasa_bcv = HistorialTasa.obtener_ultima_tasa('USD_BCV') or Decimal('896.12')
+    if tasa_bcv <= Decimal('0.00'):
+        tasa_bcv = Decimal('1.00')
+
+    val_venta_dec = Decimal(str(total_valor_venta))
+    val_costo_dec = Decimal(str(total_valor_costo))
+    valor_venta_usd = float((val_venta_dec / tasa_bcv).quantize(Decimal('0.01')))
+    valor_costo_usd = float((val_costo_dec / tasa_bcv).quantize(Decimal('0.01')))
+
     return JsonResponse({
         'total_productos': total_prods,
         'unidades_disponibles': total_uds,
         'valor_venta_disponible': total_valor_venta,
-        'valor_costo_disponible': total_valor_costo
+        'valor_venta_disponible_usd': valor_venta_usd,
+        'valor_costo_disponible': total_valor_costo,
+        'valor_costo_disponible_usd': valor_costo_usd,
+        'tasa_usd_bcv': float(tasa_bcv)
     })
