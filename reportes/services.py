@@ -384,6 +384,17 @@ def generar_excel_completo(desde_dt=None, hasta_dt=None):
             g.observaciones
         ])
 
+    # Formato numérico profesional con separador de miles y decimales en todas las hojas
+    for sheet in wb.worksheets:
+        for row in sheet.iter_rows(min_row=2):
+            for cell in row:
+                if isinstance(cell.value, (float, Decimal)):
+                    cell.number_format = '#,##0.00'
+                    cell.alignment = Alignment(horizontal="right", vertical="center")
+                elif isinstance(cell.value, int) and cell.column != 1:  # Ignorar columna de ID
+                    cell.number_format = '#,##0'
+                    cell.alignment = Alignment(horizontal="right", vertical="center")
+
     # Autoajuste de anchos de columna en todas las hojas
     for sheet in wb.worksheets:
         for col in sheet.columns:

@@ -11,13 +11,20 @@
         if (!v) return 0;
         let s = String(v).trim();
         if (s.includes(',') && s.includes('.')) {
-            if (s.indexOf('.') < s.indexOf(',')) {
+            if (s.lastIndexOf(',') > s.lastIndexOf('.')) {
+                // Formato hispano/venezolano: 7.500,50 -> punto es mil, coma es decimal
                 s = s.replaceAll('.', '').replace(',', '.');
             } else {
+                // Formato anglosajón: 7,500.50 -> coma es mil, punto es decimal
                 s = s.replaceAll(',', '');
             }
         } else if (s.includes(',')) {
-            s = s.replace(',', '.');
+            s = s.replaceAll('.', '').replace(',', '.');
+        } else if (s.includes('.')) {
+            const parts = s.split('.');
+            if (parts.length > 2 || (parts.length === 2 && parts[1].length === 3)) {
+                s = s.replaceAll('.', '');
+            }
         }
         let val = Number.parseFloat(s);
         return Number.isNaN(val) ? 0 : val;
@@ -106,13 +113,13 @@
                 if ($('bar-usd-rate')) $('bar-usd-rate').textContent = 'Bs ' + fmt(data.usd_bcv);
                 // Si hay un cobro en curso con carrito activo, NO sobreescribir la tasa congelada
                 if (!window.saleRatesFrozen && $('rate-usd')) {
-                    $('rate-usd').value = data.usd_bcv.toFixed(2).replace('.', ',');
+                    $('rate-usd').value = fmt(data.usd_bcv);
                 }
             }
             if (data.usdt) {
                 if ($('bar-usdt-rate')) $('bar-usdt-rate').textContent = 'Bs ' + fmt(data.usdt);
                 if (!window.saleRatesFrozen && $('rate-usdt')) {
-                    $('rate-usdt').value = data.usdt.toFixed(2).replace('.', ',');
+                    $('rate-usdt').value = fmt(data.usdt);
                 }
             }
             if (data.fecha_actualizacion && $('rates-updated-text')) {
@@ -277,8 +284,15 @@
         $('name').value = p.nombre;
         $('name').readOnly = true;
         $('minimum').value = p.stock_minimo;
-        if (p.ultimo_costo > 0) $('cost').value = p.ultimo_costo.toFixed(2).replace('.', ',');
-        if (p.ultimo_precio > 0) $('price').value = p.ultimo_precio.toFixed(2).replace('.', ',');
+        const rate = getBcvRate();
+        if (p.ultimo_costo > 0) {
+            $('cost').value = fmt(p.ultimo_costo);
+            if ($('cost-usd') && rate > 0) $('cost-usd').value = fmt(p.ultimo_costo / rate);
+        }
+        if (p.ultimo_precio > 0) {
+            $('price').value = fmt(p.ultimo_precio);
+            if ($('price-usd') && rate > 0) $('price-usd').value = fmt(p.ultimo_precio / rate);
+        }
         $('clear-selection').hidden = false;
         $('suggest').innerHTML = '';
         info(`Producto "${p.nombre}" seleccionado. Ingresa la nueva cantidad recibida.`);
@@ -292,20 +306,26 @@
         $('clear-selection').hidden = true;
         $('suggest').innerHTML = '';
         $('minimum').value = '3';
+        if ($('cost-usd')) $('cost-usd').value = '';
+        if ($('price-usd')) $('price-usd').value = '';
     }
 
     $('clear-selection').onclick = resetEntryForm;
 
-    // Conversión bidireccional USD <-> Bs en Entrada de Mercancía
+    // Conversión bidireccional USD <-> Bs en Entrada de Mercancía con separador de miles
     if ($('cost-usd')) {
         $('cost-usd').oninput = () => {
             const valUsd = parseMoney($('cost-usd').value);
             const rate = getBcvRate();
             if (valUsd > 0) {
-                $('cost').value = (valUsd * rate).toFixed(2).replace('.', ',');
+                $('cost').value = fmt(valUsd * rate);
             } else if ($('cost-usd').value.trim() === '') {
                 $('cost').value = '';
             }
+        };
+        $('cost-usd').onblur = () => {
+            const v = parseMoney($('cost-usd').value);
+            if (v > 0) $('cost-usd').value = fmt(v);
         };
     }
     if ($('cost')) {
@@ -313,10 +333,14 @@
             const valBs = parseMoney($('cost').value);
             const rate = getBcvRate();
             if (valBs > 0 && rate > 0) {
-                if ($('cost-usd')) $('cost-usd').value = (valBs / rate).toFixed(2).replace('.', ',');
+                if ($('cost-usd')) $('cost-usd').value = fmt(valBs / rate);
             } else if ($('cost').value.trim() === '') {
                 if ($('cost-usd')) $('cost-usd').value = '';
             }
+        };
+        $('cost').onblur = () => {
+            const v = parseMoney($('cost').value);
+            if (v > 0) $('cost').value = fmt(v);
         };
     }
 
@@ -325,10 +349,14 @@
             const valUsd = parseMoney($('price-usd').value);
             const rate = getBcvRate();
             if (valUsd > 0) {
-                $('price').value = (valUsd * rate).toFixed(2).replace('.', ',');
+                $('price').value = fmt(valUsd * rate);
             } else if ($('price-usd').value.trim() === '') {
                 $('price').value = '';
             }
+        };
+        $('price-usd').onblur = () => {
+            const v = parseMoney($('price-usd').value);
+            if (v > 0) $('price-usd').value = fmt(v);
         };
     }
     if ($('price')) {
@@ -336,10 +364,14 @@
             const valBs = parseMoney($('price').value);
             const rate = getBcvRate();
             if (valBs > 0 && rate > 0) {
-                if ($('price-usd')) $('price-usd').value = (valBs / rate).toFixed(2).replace('.', ',');
+                if ($('price-usd')) $('price-usd').value = fmt(valBs / rate);
             } else if ($('price').value.trim() === '') {
                 if ($('price-usd')) $('price-usd').value = '';
             }
+        };
+        $('price').onblur = () => {
+            const v = parseMoney($('price').value);
+            if (v > 0) $('price').value = fmt(v);
         };
     }
 
@@ -545,8 +577,8 @@
         const selectedOpt = select.options[select.selectedIndex];
         if (selectedOpt && selectedOpt.dataset.price) {
             const pBs = Number(selectedOpt.dataset.price);
-            $('sell-unit-price').value = pBs.toFixed(2).replace('.', ',');
-            if ($('sell-unit-price-usd')) $('sell-unit-price-usd').value = rBcv > 0 ? (pBs / rBcv).toFixed(2).replace('.', ',') : '';
+            $('sell-unit-price').value = fmt(pBs);
+            if ($('sell-unit-price-usd')) $('sell-unit-price-usd').value = rBcv > 0 ? fmt(pBs / rBcv) : '';
         }
     }
 
@@ -556,21 +588,25 @@
         if (opt && opt.dataset.price) {
             const pBs = Number(opt.dataset.price);
             const rBcv = getBcvRate();
-            $('sell-unit-price').value = pBs.toFixed(2).replace('.', ',');
-            if ($('sell-unit-price-usd')) $('sell-unit-price-usd').value = rBcv > 0 ? (pBs / rBcv).toFixed(2).replace('.', ',') : '';
+            $('sell-unit-price').value = fmt(pBs);
+            if ($('sell-unit-price-usd')) $('sell-unit-price-usd').value = rBcv > 0 ? fmt(pBs / rBcv) : '';
         }
     };
 
-    // Conversión bidireccional USD <-> Bs en precio de venta en caja
+    // Conversión bidireccional USD <-> Bs en precio de venta en caja con separador de miles
     if ($('sell-unit-price-usd')) {
         $('sell-unit-price-usd').oninput = () => {
             const valUsd = parseMoney($('sell-unit-price-usd').value);
             const rate = getBcvRate();
             if (valUsd > 0) {
-                $('sell-unit-price').value = (valUsd * rate).toFixed(2).replace('.', ',');
+                $('sell-unit-price').value = fmt(valUsd * rate);
             } else if ($('sell-unit-price-usd').value.trim() === '') {
                 $('sell-unit-price').value = '';
             }
+        };
+        $('sell-unit-price-usd').onblur = () => {
+            const v = parseMoney($('sell-unit-price-usd').value);
+            if (v > 0) $('sell-unit-price-usd').value = fmt(v);
         };
     }
     if ($('sell-unit-price')) {
@@ -578,10 +614,14 @@
             const valBs = parseMoney($('sell-unit-price').value);
             const rate = getBcvRate();
             if (valBs > 0 && rate > 0) {
-                if ($('sell-unit-price-usd')) $('sell-unit-price-usd').value = (valBs / rate).toFixed(2).replace('.', ',');
+                if ($('sell-unit-price-usd')) $('sell-unit-price-usd').value = fmt(valBs / rate);
             } else if ($('sell-unit-price').value.trim() === '') {
                 if ($('sell-unit-price-usd')) $('sell-unit-price-usd').value = '';
             }
+        };
+        $('sell-unit-price').onblur = () => {
+            const v = parseMoney($('sell-unit-price').value);
+            if (v > 0) $('sell-unit-price').value = fmt(v);
         };
     }
 
@@ -772,6 +812,34 @@
 
     ['pay-bs', 'pay-mobile', 'pay-punto', 'pay-usd', 'pay-usdt', 'rate-usd', 'rate-usdt'].forEach(id => {
         if ($(id)) $(id).oninput = updatePaymentCalculations;
+    });
+
+    ['pay-bs', 'pay-mobile', 'pay-punto', 'pay-usd', 'pay-usdt'].forEach(id => {
+        const el = $(id);
+        if (el) {
+            el.onfocus = () => {
+                if (el.value === '0' || el.value === '0,00') el.select();
+            };
+            el.onblur = () => {
+                const v = parseMoney(el.value);
+                el.value = (v > 0) ? fmt(v) : '0';
+                updatePaymentCalculations();
+            };
+        }
+    });
+
+    ['rate-usd', 'rate-usdt'].forEach(id => {
+        const el = $(id);
+        if (el) {
+            el.onfocus = () => {
+                el.select();
+            };
+            el.onblur = () => {
+                const v = parseMoney(el.value);
+                if (v > 0) el.value = fmt(v);
+                updatePaymentCalculations();
+            };
+        }
     });
 
     $('finish').onclick = async () => {
@@ -1121,8 +1189,22 @@
         }
     }
 
-    if ($('expense-amount')) $('expense-amount').oninput = updateExpenseEquivalent;
-    if ($('expense-rate')) $('expense-rate').oninput = updateExpenseEquivalent;
+    if ($('expense-amount')) {
+        $('expense-amount').oninput = updateExpenseEquivalent;
+        $('expense-amount').onblur = () => {
+            const v = parseMoney($('expense-amount').value);
+            if (v > 0) $('expense-amount').value = fmt(v);
+            updateExpenseEquivalent();
+        };
+    }
+    if ($('expense-rate')) {
+        $('expense-rate').oninput = updateExpenseEquivalent;
+        $('expense-rate').onblur = () => {
+            const v = parseMoney($('expense-rate').value);
+            if (v > 0) $('expense-rate').value = fmt(v);
+            updateExpenseEquivalent();
+        };
+    }
 
     if ($('expense-currency')) {
         $('expense-currency').onchange = () => {
@@ -1134,7 +1216,7 @@
                 $('expense-rate').value = $('rate-usdt').value;
                 $('expense-method').value = 'USDT';
             } else {
-                $('expense-rate').value = '1.00';
+                $('expense-rate').value = '1,00';
                 $('expense-method').value = 'EFECTIVO_BS';
             }
             updateExpenseEquivalent();
