@@ -94,7 +94,7 @@
                 const el = $(id);
                 if (el) el.hidden = (id !== tab);
             });
-            if (tab === 'entry') void loadRecentEntries();
+            if (tab === 'entry') void loadEntries(1);
             if (tab === 'sell') void loadLots();
             if (tab === 'stock') void loadInventoryMetrics();
             if (tab === 'expenses') void loadExpenses();
@@ -306,8 +306,11 @@
             renderRecentEntries(data.total_entradas || 0, data.pagina_actual || 1, totalEntriesPages);
         } catch (e) {
             console.error('Error cargando entradas:', e);
+            const el = $('recent-entries');
+            if (el) el.innerHTML = '<div class="empty">No se pudieron cargar los movimientos.</div>';
         }
     }
+    const loadRecentEntries = (p = 1) => loadEntries(p);
 
     // Control de filtros de fecha en historial de entradas
     if ($('entry-date-filter')) {
