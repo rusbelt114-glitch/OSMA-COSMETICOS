@@ -41,12 +41,17 @@ def api_reporte_resumen(request):
     for v in resumen['ventas_listado']:
         articulos_str = ", ".join(f"{d.cantidad}x {d.producto.nombre}" for d in v.detalles.all())
         medios_str = " + ".join(p.get_metodo_display() for p in v.pagos.all())
+        t_v = v.tasa_usd_bcv if v.tasa_usd_bcv > 0 else Decimal('1.00')
+        tot_u = float(v.total_usd) if v.total_usd > 0 else float((v.total_bs / t_v).quantize(Decimal('0.01')))
+        gan_u = float(v.ganancia_bruta_usd) if v.ganancia_bruta_usd > 0 else float((v.ganancia_bruta_bs / t_v).quantize(Decimal('0.01')))
         ventas_data.append({
             'codigo': v.codigo,
             'fecha': timezone.localtime(v.fecha).strftime("%d/%m/%Y %I:%M %p"),
             'total_bs': float(v.total_bs),
+            'total_usd': tot_u,
             'costo_total_bs': float(v.costo_total_bs),
             'ganancia_bruta_bs': float(v.ganancia_bruta_bs),
+            'ganancia_bruta_usd': gan_u,
             'vuelto_total_bs': float(v.vuelto_total_bs),
             'anulada': v.anulada,
             'articulos': articulos_str,

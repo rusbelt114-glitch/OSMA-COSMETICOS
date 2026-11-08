@@ -386,9 +386,17 @@
             if ($('price-mayor')) $('price-mayor').value = fmt(p.ultimo_precio_mayor);
             if ($('price-mayor-usd') && rate > 0) $('price-mayor-usd').value = fmt(p.ultimo_precio_mayor / rate);
         }
+        if (p.ultimo_precio_promo_mayor > 0) {
+            if ($('price-promo-mayor')) $('price-promo-mayor').value = fmt(p.ultimo_precio_promo_mayor);
+            if ($('price-promo-mayor-usd') && rate > 0) $('price-promo-mayor-usd').value = fmt(p.ultimo_precio_promo_mayor / rate);
+        }
         if (p.ultimo_precio_gran_mayor > 0) {
             if ($('price-gran-mayor')) $('price-gran-mayor').value = fmt(p.ultimo_precio_gran_mayor);
             if ($('price-gran-mayor-usd') && rate > 0) $('price-gran-mayor-usd').value = fmt(p.ultimo_precio_gran_mayor / rate);
+        }
+        if (p.ultimo_precio_promo_gran_mayor > 0) {
+            if ($('price-promo-gran-mayor')) $('price-promo-gran-mayor').value = fmt(p.ultimo_precio_promo_gran_mayor);
+            if ($('price-promo-gran-mayor-usd') && rate > 0) $('price-promo-gran-mayor-usd').value = fmt(p.ultimo_precio_promo_gran_mayor / rate);
         }
         if (p.ultimo_precio_promo > 0) {
             if ($('price-promo')) $('price-promo').value = fmt(p.ultimo_precio_promo);
@@ -411,8 +419,12 @@
         if ($('price-usd')) $('price-usd').value = '';
         if ($('price-mayor-usd')) $('price-mayor-usd').value = '';
         if ($('price-mayor')) $('price-mayor').value = '';
+        if ($('price-promo-mayor-usd')) $('price-promo-mayor-usd').value = '';
+        if ($('price-promo-mayor')) $('price-promo-mayor').value = '';
         if ($('price-gran-mayor-usd')) $('price-gran-mayor-usd').value = '';
         if ($('price-gran-mayor')) $('price-gran-mayor').value = '';
+        if ($('price-promo-gran-mayor-usd')) $('price-promo-gran-mayor-usd').value = '';
+        if ($('price-promo-gran-mayor')) $('price-promo-gran-mayor').value = '';
         if ($('price-promo-usd')) $('price-promo-usd').value = '';
         if ($('price-promo')) $('price-promo').value = '';
     }
@@ -467,7 +479,9 @@
     setupBidiPair('cost-usd', 'cost');
     setupBidiPair('price-usd', 'price');
     setupBidiPair('price-mayor-usd', 'price-mayor');
+    setupBidiPair('price-promo-mayor-usd', 'price-promo-mayor');
     setupBidiPair('price-gran-mayor-usd', 'price-gran-mayor');
+    setupBidiPair('price-promo-gran-mayor-usd', 'price-promo-gran-mayor');
     setupBidiPair('price-promo-usd', 'price-promo');
 
 
@@ -479,7 +493,9 @@
         const costo_unitario = parseMoney($('cost').value);
         const precio_venta = parseMoney($('price').value);
         const precio_mayor = $('price-mayor') ? parseMoney($('price-mayor').value) : 0;
+        const precio_promo_mayor = $('price-promo-mayor') ? parseMoney($('price-promo-mayor').value) : 0;
         const precio_gran_mayor = $('price-gran-mayor') ? parseMoney($('price-gran-mayor').value) : 0;
+        const precio_promo_gran_mayor = $('price-promo-gran-mayor') ? parseMoney($('price-promo-gran-mayor').value) : 0;
         const precio_promo_divisa = $('price-promo') ? parseMoney($('price-promo').value) : 0;
 
         if (!nombre) {
@@ -517,7 +533,9 @@
                     costo_unitario: costo_unitario,
                     precio_venta: precio_venta,
                     precio_mayor: precio_mayor,
+                    precio_promo_mayor: precio_promo_mayor,
                     precio_gran_mayor: precio_gran_mayor,
+                    precio_promo_gran_mayor: precio_promo_gran_mayor,
                     precio_promo_divisa: precio_promo_divisa,
                     confirmar_coincidencia: window._confirmarCoincidenciaEntrada || false
                 })
@@ -656,15 +674,18 @@
 
     function getPriceForProduct(p) {
         const isPromo = $('chk-promo-divisa') && $('chk-promo-divisa').checked;
-        if (isPromo && p.ultimo_precio_promo > 0) {
-            return p.ultimo_precio_promo;
+        if (currentSaleMode === 'mayor') {
+            if (isPromo && p.ultimo_precio_promo_mayor > 0) return p.ultimo_precio_promo_mayor;
+            if (p.ultimo_precio_mayor > 0) return p.ultimo_precio_mayor;
+            return p.ultimo_precio;
         }
-        if (currentSaleMode === 'mayor' && p.ultimo_precio_mayor > 0) {
-            return p.ultimo_precio_mayor;
+        if (currentSaleMode === 'gran_mayor') {
+            if (isPromo && p.ultimo_precio_promo_gran_mayor > 0) return p.ultimo_precio_promo_gran_mayor;
+            if (p.ultimo_precio_gran_mayor > 0) return p.ultimo_precio_gran_mayor;
+            return p.ultimo_precio;
         }
-        if (currentSaleMode === 'gran_mayor' && p.ultimo_precio_gran_mayor > 0) {
-            return p.ultimo_precio_gran_mayor;
-        }
+        // Modo Detal por defecto
+        if (isPromo && p.ultimo_precio_promo > 0) return p.ultimo_precio_promo;
         return p.ultimo_precio;
     }
 
@@ -715,9 +736,14 @@
             const precioBs = getPriceForProduct(p);
             const precioUsd = rBcv > 0 ? (precioBs / rBcv) : 0;
             let tag = '';
-            if ($('chk-promo-divisa') && $('chk-promo-divisa').checked && p.ultimo_precio_promo > 0) tag = ' · [Promo]';
-            else if (currentSaleMode === 'mayor') tag = ' · [Mayor]';
-            else if (currentSaleMode === 'gran_mayor') tag = ' · [Gran Mayor]';
+            const isPromo = $('chk-promo-divisa') && $('chk-promo-divisa').checked;
+            if (currentSaleMode === 'mayor') {
+                tag = isPromo && p.ultimo_precio_promo_mayor > 0 ? ' · [Promo Mayor]' : ' · [Mayor]';
+            } else if (currentSaleMode === 'gran_mayor') {
+                tag = isPromo && p.ultimo_precio_promo_gran_mayor > 0 ? ' · [Promo Gran Mayor]' : ' · [Gran Mayor]';
+            } else if (isPromo && p.ultimo_precio_promo > 0) {
+                tag = ' · [Promo Detal]';
+            }
 
             return `<option value="${p.id}" data-price="${precioBs}" data-prod="${p.id}" data-max="${p.stock_total}">
                 ${esc(p.nombre)} · ${p.stock_total} disp. en total - Bs ${fmt(precioBs)} (≈ USD $ ${fmt(precioUsd)})${tag}
@@ -752,9 +778,14 @@
         let prodName = opt.text.split('·')[0].trim();
 
         let modeTag = '';
-        if ($('chk-promo-divisa') && $('chk-promo-divisa').checked) modeTag = ' (Promo)';
-        else if (currentSaleMode === 'mayor') modeTag = ' (Mayor)';
-        else if (currentSaleMode === 'gran_mayor') modeTag = ' (Gran Mayor)';
+        const isPromo = $('chk-promo-divisa') && $('chk-promo-divisa').checked;
+        if (currentSaleMode === 'mayor') {
+            modeTag = isPromo ? ' (Promo Mayor)' : ' (Mayor)';
+        } else if (currentSaleMode === 'gran_mayor') {
+            modeTag = isPromo ? ' (Promo Gran Mayor)' : ' (Gran Mayor)';
+        } else if (isPromo) {
+            modeTag = ' (Promo Detal)';
+        }
 
         const pObj = allProducts.find(x => x.id === prodId);
         if (!pObj) {
@@ -1135,27 +1166,31 @@
             let precioInfoHtml = '';
             if (stockPriceView === 'detal') {
                 const usd = bcvRate > 0 ? (p.ultimo_precio / bcvRate) : 0;
-                precioInfoHtml = `Precio Detal: <b>Bs ${fmt(p.ultimo_precio)}</b> <span style="color: #2b5c4f; font-weight: 600;">(≈ USD $ ${fmt(usd)})</span>`;
+                const promoHtml = p.ultimo_precio_promo > 0 ? ` · <span style="color: #2b5c4f; font-weight: 600;">Promo Cash: $${fmt(p.ultimo_precio_promo / bcvRate)}</span>` : '';
+                precioInfoHtml = `Precio Detal: <b>Bs ${fmt(p.ultimo_precio)}</b> <span style="color: #2b5c4f; font-weight: 600;">(≈ USD $ ${fmt(usd)})</span>${promoHtml}`;
             } else if (stockPriceView === 'mayor') {
                 const pm = p.ultimo_precio_mayor > 0 ? p.ultimo_precio_mayor : p.ultimo_precio;
                 const usd = bcvRate > 0 ? (pm / bcvRate) : 0;
-                precioInfoHtml = `Precio Mayor: <b>Bs ${fmt(pm)}</b> <span style="color: #2b5c4f; font-weight: 600;">(≈ USD $ ${fmt(usd)})</span>`;
+                const promoHtml = p.ultimo_precio_promo_mayor > 0 ? ` · <span style="color: #2b5c4f; font-weight: 600;">Promo Cash: $${fmt(p.ultimo_precio_promo_mayor / bcvRate)}</span>` : '';
+                precioInfoHtml = `Precio Mayor: <b>Bs ${fmt(pm)}</b> <span style="color: #2b5c4f; font-weight: 600;">(≈ USD $ ${fmt(usd)})</span>${promoHtml}`;
             } else if (stockPriceView === 'gran_mayor') {
                 const pgm = p.ultimo_precio_gran_mayor > 0 ? p.ultimo_precio_gran_mayor : p.ultimo_precio;
                 const usd = bcvRate > 0 ? (pgm / bcvRate) : 0;
-                precioInfoHtml = `Precio Gran Mayor: <b>Bs ${fmt(pgm)}</b> <span style="color: #2b5c4f; font-weight: 600;">(≈ USD $ ${fmt(usd)})</span>`;
+                const promoHtml = p.ultimo_precio_promo_gran_mayor > 0 ? ` · <span style="color: #2b5c4f; font-weight: 600;">Promo Cash: $${fmt(p.ultimo_precio_promo_gran_mayor / bcvRate)}</span>` : '';
+                precioInfoHtml = `Precio Gran Mayor: <b>Bs ${fmt(pgm)}</b> <span style="color: #2b5c4f; font-weight: 600;">(≈ USD $ ${fmt(usd)})</span>${promoHtml}`;
             } else {
                 const uDetal = bcvRate > 0 ? fmt(p.ultimo_precio / bcvRate) : '0,00';
                 const uMayor = p.ultimo_precio_mayor > 0 ? fmt(p.ultimo_precio_mayor / bcvRate) : '-';
                 const uGranMayor = p.ultimo_precio_gran_mayor > 0 ? fmt(p.ultimo_precio_gran_mayor / bcvRate) : '-';
-                const uPromo = p.ultimo_precio_promo > 0 ? fmt(p.ultimo_precio_promo / bcvRate) : '-';
+                const uPromoDetal = p.ultimo_precio_promo > 0 ? fmt(p.ultimo_precio_promo / bcvRate) : '-';
+                const uPromoMayor = p.ultimo_precio_promo_mayor > 0 ? fmt(p.ultimo_precio_promo_mayor / bcvRate) : '-';
+                const uPromoGranMayor = p.ultimo_precio_promo_gran_mayor > 0 ? fmt(p.ultimo_precio_promo_gran_mayor / bcvRate) : '-';
 
                 precioInfoHtml = `
                     <div style="font-size: 0.8rem; display: flex; gap: 8px; flex-wrap: wrap; margin-top: 3px;">
-                        <span>Detal: <b>$${uDetal}</b></span> · 
-                        <span>Mayor: <b>$${uMayor}</b></span> · 
-                        <span>Gran Mayor: <b>$${uGranMayor}</b></span> · 
-                        <span style="color: #2d5a4c;">Promo: <b>$${uPromo}</b></span>
+                        <span>Detal: <b>$${uDetal}</b> (Cash: $${uPromoDetal})</span> · 
+                        <span>Mayor: <b>$${uMayor}</b> (Cash: $${uPromoMayor})</span> · 
+                        <span>Gran Mayor: <b>$${uGranMayor}</b> (Cash: $${uPromoGranMayor})</span>
                     </div>
                 `;
             }

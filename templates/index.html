@@ -165,27 +165,42 @@
                         <input id="price" inputmode="decimal" required placeholder="0,00">
                     </label>
 
-                    <!-- Precios adicionales: Mayor, Gran Mayor y Promo Divisa -->
-                    <div class="full" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; background: #fafaf8; padding: 12px; border-radius: 6px; border: 1px solid var(--line); margin-top: 4px;">
-                        <div>
-                            <span style="font-size: 0.82rem; font-weight: 600; color: #1a4d40; display: block; margin-bottom: 4px;">📦 Precio al Mayor</span>
-                            <div style="display: flex; gap: 6px;">
-                                <label style="flex: 1; margin: 0; font-size: 0.78rem;">USD ($)<input id="price-mayor-usd" inputmode="decimal" placeholder="0,00"></label>
-                                <label style="flex: 1; margin: 0; font-size: 0.78rem;">Bs<input id="price-mayor" inputmode="decimal" placeholder="0,00"></label>
-                            </div>
-                        </div>
-                        <div>
-                            <span style="font-size: 0.82rem; font-weight: 600; color: #1a4d40; display: block; margin-bottom: 4px;">🏢 Precio Gran Mayor</span>
-                            <div style="display: flex; gap: 6px;">
-                                <label style="flex: 1; margin: 0; font-size: 0.78rem;">USD ($)<input id="price-gran-mayor-usd" inputmode="decimal" placeholder="0,00"></label>
-                                <label style="flex: 1; margin: 0; font-size: 0.78rem;">Bs<input id="price-gran-mayor" inputmode="decimal" placeholder="0,00"></label>
-                            </div>
-                        </div>
-                        <div>
-                            <span style="font-size: 0.82rem; font-weight: 600; color: #2d5a4c; display: block; margin-bottom: 4px;">💵 Promo Divisa (Efectivo)</span>
+                    <!-- Precios adicionales: Mayor, Gran Mayor y Promociones en Divisa -->
+                    <div class="full" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; background: #fafaf8; padding: 14px; border-radius: 8px; border: 1px solid var(--line); margin-top: 6px;">
+                        <!-- Detal Promo Divisa -->
+                        <div style="background: #fff; padding: 10px; border-radius: 6px; border: 1px solid var(--line);">
+                            <span style="font-size: 0.82rem; font-weight: 700; color: #1a4d40; display: block; margin-bottom: 4px;">🏷️ Promo Divisa · Detal (Cash)</span>
                             <div style="display: flex; gap: 6px;">
                                 <label style="flex: 1; margin: 0; font-size: 0.78rem;">USD ($)<input id="price-promo-usd" inputmode="decimal" placeholder="0,00"></label>
                                 <label style="flex: 1; margin: 0; font-size: 0.78rem;">Bs<input id="price-promo" inputmode="decimal" placeholder="0,00"></label>
+                            </div>
+                        </div>
+
+                        <!-- Mayor & Promo Mayor -->
+                        <div style="background: #fff; padding: 10px; border-radius: 6px; border: 1px solid var(--line);">
+                            <span style="font-size: 0.82rem; font-weight: 700; color: #1a4d40; display: block; margin-bottom: 4px;">📦 Venta al Mayor</span>
+                            <div style="display: flex; gap: 6px; margin-bottom: 6px;">
+                                <label style="flex: 1; margin: 0; font-size: 0.78rem;">Mayor USD ($)<input id="price-mayor-usd" inputmode="decimal" placeholder="0,00"></label>
+                                <label style="flex: 1; margin: 0; font-size: 0.78rem;">Mayor Bs<input id="price-mayor" inputmode="decimal" placeholder="0,00"></label>
+                            </div>
+                            <span style="font-size: 0.78rem; font-weight: 600; color: #2d5a4c; display: block; margin-bottom: 2px;">💵 Promo Divisa Mayor (Cash)</span>
+                            <div style="display: flex; gap: 6px;">
+                                <label style="flex: 1; margin: 0; font-size: 0.75rem;">USD ($)<input id="price-promo-mayor-usd" inputmode="decimal" placeholder="0,00"></label>
+                                <label style="flex: 1; margin: 0; font-size: 0.75rem;">Bs<input id="price-promo-mayor" inputmode="decimal" placeholder="0,00"></label>
+                            </div>
+                        </div>
+
+                        <!-- Gran Mayor & Promo Gran Mayor -->
+                        <div style="background: #fff; padding: 10px; border-radius: 6px; border: 1px solid var(--line);">
+                            <span style="font-size: 0.82rem; font-weight: 700; color: #1a4d40; display: block; margin-bottom: 4px;">🏢 Venta Gran Mayor</span>
+                            <div style="display: flex; gap: 6px; margin-bottom: 6px;">
+                                <label style="flex: 1; margin: 0; font-size: 0.78rem;">Gran Mayor USD<input id="price-gran-mayor-usd" inputmode="decimal" placeholder="0,00"></label>
+                                <label style="flex: 1; margin: 0; font-size: 0.78rem;">Gran Mayor Bs<input id="price-gran-mayor" inputmode="decimal" placeholder="0,00"></label>
+                            </div>
+                            <span style="font-size: 0.78rem; font-weight: 600; color: #2d5a4c; display: block; margin-bottom: 2px;">💵 Promo Divisa Gran Mayor (Cash)</span>
+                            <div style="display: flex; gap: 6px;">
+                                <label style="flex: 1; margin: 0; font-size: 0.75rem;">USD ($)<input id="price-promo-gran-mayor-usd" inputmode="decimal" placeholder="0,00"></label>
+                                <label style="flex: 1; margin: 0; font-size: 0.75rem;">Bs<input id="price-promo-gran-mayor" inputmode="decimal" placeholder="0,00"></label>
                             </div>
                         </div>
                     </div>

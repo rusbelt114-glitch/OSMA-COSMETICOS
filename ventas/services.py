@@ -75,6 +75,10 @@ def _procesar_lote_especifico(venta, entrada_id, cantidad_solicitada, precio_uni
     entrada.cantidad_disponible -= cantidad_solicitada
     entrada.save(update_fields=['cantidad_disponible'])
 
+    tasa = venta.tasa_usd_bcv if venta.tasa_usd_bcv > Decimal('0.00') else Decimal('1.00')
+    sub_usd = (subtotal_item_bs / tasa).quantize(Decimal('0.01'))
+    cost_usd = (costo_linea_bs / tasa).quantize(Decimal('0.01'))
+
     detalle = DetalleVenta.objects.create(
         venta=venta,
         producto=producto,
@@ -82,7 +86,10 @@ def _procesar_lote_especifico(venta, entrada_id, cantidad_solicitada, precio_uni
         precio_unitario_bs=precio_unitario,
         subtotal_bs=subtotal_item_bs,
         costo_total_bs=costo_linea_bs,
-        ganancia_bruta_bs=subtotal_item_bs - costo_linea_bs
+        ganancia_bruta_bs=subtotal_item_bs - costo_linea_bs,
+        subtotal_usd=sub_usd,
+        costo_total_usd=cost_usd,
+        ganancia_bruta_usd=sub_usd - cost_usd
     )
 
     DesgloseLoteVenta.objects.create(
@@ -142,9 +149,16 @@ def _procesar_descuento_fifo(venta, producto_id, cantidad_solicitada, precio_uni
         )
         unidades_por_descontar -= descontar
 
+    tasa = venta.tasa_usd_bcv if venta.tasa_usd_bcv > Decimal('0.00') else Decimal('1.00')
+    sub_usd = (subtotal_item_bs / tasa).quantize(Decimal('0.01'))
+    cost_usd = (costo_linea_bs / tasa).quantize(Decimal('0.01'))
+
     detalle.costo_total_bs = costo_linea_bs
     detalle.ganancia_bruta_bs = subtotal_item_bs - costo_linea_bs
-    detalle.save(update_fields=['costo_total_bs', 'ganancia_bruta_bs'])
+    detalle.subtotal_usd = sub_usd
+    detalle.costo_total_usd = cost_usd
+    detalle.ganancia_bruta_usd = sub_usd - cost_usd
+    detalle.save(update_fields=['costo_total_bs', 'ganancia_bruta_bs', 'subtotal_usd', 'costo_total_usd', 'ganancia_bruta_usd'])
 
     return subtotal_item_bs, costo_linea_bs
 
@@ -301,11 +315,15 @@ def registrar_venta_fifo(items_carrito, lista_pagos, tasa_usd_bcv, tasa_usdt, ob
 
     _guardar_registros_pago(venta, pagos_preparados)
 
+    tasa = venta.tasa_usd_bcv if venta.tasa_usd_bcv > Decimal('0.00') else Decimal('1.00')
     venta.total_bs = total_venta_bs
     venta.costo_total_bs = costo_total_venta_bs
     venta.ganancia_bruta_bs = total_venta_bs - costo_total_venta_bs
     venta.vuelto_total_bs = vuelto_total_bs
-    venta.save(update_fields=['total_bs', 'costo_total_bs', 'ganancia_bruta_bs', 'vuelto_total_bs'])
+    venta.total_usd = (total_venta_bs / tasa).quantize(Decimal('0.01'))
+    venta.costo_total_usd = (costo_total_venta_bs / tasa).quantize(Decimal('0.01'))
+    venta.ganancia_bruta_usd = venta.total_usd - venta.costo_total_usd
+    venta.save(update_fields=['total_bs', 'costo_total_bs', 'ganancia_bruta_bs', 'vuelto_total_bs', 'total_usd', 'costo_total_usd', 'ganancia_bruta_usd'])
 
     return venta
 

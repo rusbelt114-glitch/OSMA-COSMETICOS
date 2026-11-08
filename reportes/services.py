@@ -85,21 +85,48 @@ def obtener_resumen_periodo(desde_dt=None, hasta_dt=None):
     # Saldo final real del negocio / caja (después de gastos de tienda y retiros personales del dueño)
     saldo_caja_real = resultado_despues_gastos - total_gastos_personal
 
-    # Tasa para conversión a dólares USD
+    # Tasa actual para valoración del inventario presente en almacén
     tasa_bcv = HistorialTasa.obtener_ultima_tasa('USD_BCV') or Decimal('896.12')
     if tasa_bcv <= Decimal('0.00'):
         tasa_bcv = Decimal('1.00')
 
+    # TOTALES EN USD CONGELADOS HISTÓRICAMENTE:
+    # Cada venta y pago en efectivo USD respeta su valor original sin sufrir recálculos por tasas futuras.
+    total_ingresos_usd = Decimal('0.00')
+    total_costos_usd = Decimal('0.00')
+    total_ganancia_usd = Decimal('0.00')
+    for v in ventas_qs:
+        if v.total_usd and v.total_usd > Decimal('0.00'):
+            total_ingresos_usd += v.total_usd
+            total_costos_usd += v.costo_total_usd
+            total_ganancia_usd += v.ganancia_bruta_usd
+        else:
+            t_v = v.tasa_usd_bcv if v.tasa_usd_bcv > Decimal('0.00') else tasa_bcv
+            ing_u = (v.total_bs / t_v).quantize(Decimal('0.01'))
+            cos_u = (v.costo_total_bs / t_v).quantize(Decimal('0.01'))
+            total_ingresos_usd += ing_u
+            total_costos_usd += cos_u
+            total_ganancia_usd += (ing_u - cos_u)
+
+    # GASTOS EN USD HISTÓRICOS:
+    total_gastos_tienda_usd = Decimal('0.00')
+    total_gastos_personal_usd = Decimal('0.00')
+    for g in gastos_qs:
+        if g.moneda in ('USD', 'USDT'):
+            m_usd = g.monto_original
+        else:
+            t_g = g.tasa_aplicada if g.tasa_aplicada > Decimal('0.00') else tasa_bcv
+            m_usd = (g.monto_original / t_g).quantize(Decimal('0.01'))
+        if g.categoria == 'TIENDA':
+            total_gastos_tienda_usd += m_usd
+        else:
+            total_gastos_personal_usd += m_usd
+
+    resultado_despues_gastos_usd = total_ganancia_usd - total_gastos_tienda_usd
+    saldo_caja_real_usd = resultado_despues_gastos_usd - total_gastos_personal_usd
+
     def a_usd(monto_bs):
         return (Decimal(str(monto_bs)) / tasa_bcv).quantize(Decimal('0.01'))
-
-    total_ingresos_usd = a_usd(total_ingresos)
-    total_costos_usd = a_usd(total_costos)
-    total_ganancia_usd = a_usd(total_ganancia)
-    total_gastos_tienda_usd = a_usd(total_gastos_tienda)
-    resultado_despues_gastos_usd = a_usd(resultado_despues_gastos)
-    total_gastos_personal_usd = a_usd(total_gastos_personal)
-    saldo_caja_real_usd = a_usd(saldo_caja_real)
 
     # Inventario actual (a la fecha y hora de la consulta, independiente del período de ventas)
     entradas_activas = EntradaMercancia.objects.filter(cantidad_disponible__gt=0, producto__activo=True)
@@ -281,8 +308,8 @@ def generar_excel_completo(desde_dt=None, hasta_dt=None):
     # ----------------------------------------------------
     ws_ven = wb.create_sheet(title="Ventas y Ganancia")
     headers_ven = [
-        "Código Venta", "Fecha y Hora (Caracas)", "Total Venta (Bs)", 
-        "Costo Mercancía (Bs)", "Ganancia Bruta (Bs)", 
+        "Código Venta", "Fecha y Hora (Caracas)", "Total Venta (Bs)", "Total Venta ($)",
+        "Costo Mercancía (Bs)", "Costo ($)", "Ganancia Bruta (Bs)", "Ganancia Bruta ($)",
         "Vuelto Entregado (Bs)", "Tasa USD BCV", "Tasa USDT", "Observaciones"
     ]
     ws_ven.append(headers_ven)
@@ -299,12 +326,20 @@ def generar_excel_completo(desde_dt=None, hasta_dt=None):
         ventas = ventas.filter(fecha__lte=hasta_dt)
 
     for v in ventas:
+        t_v = v.tasa_usd_bcv if v.tasa_usd_bcv > 0 else Decimal('1.00')
+        tot_u = float(v.total_usd) if v.total_usd > 0 else float((v.total_bs / t_v).quantize(Decimal('0.01')))
+        cos_u = float(v.costo_total_usd) if v.costo_total_usd > 0 else float((v.costo_total_bs / t_v).quantize(Decimal('0.01')))
+        gan_u = float(v.ganancia_bruta_usd) if v.ganancia_bruta_usd > 0 else float(tot_u - cos_u)
+
         ws_ven.append([
             v.codigo,
             timezone.localtime(v.fecha).strftime("%d/%m/%Y %I:%M %p"),
             float(v.total_bs),
+            tot_u,
             float(v.costo_total_bs),
+            cos_u,
             float(v.ganancia_bruta_bs),
+            gan_u,
             float(v.vuelto_total_bs),
             float(v.tasa_usd_bcv),
             float(v.tasa_usdt),

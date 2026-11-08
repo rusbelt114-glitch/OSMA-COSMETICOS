@@ -11,6 +11,11 @@ class Venta(models.Model):
     costo_total_bs = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'))
     ganancia_bruta_bs = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'))
     
+    # Valores congelados en USD al momento exacto de la venta (inmunes a cambios futuros de tasa)
+    total_usd = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'))
+    costo_total_usd = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'))
+    ganancia_bruta_usd = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'))
+    
     # Tasas congeladas al momento exacto de la venta
     tasa_usd_bcv = models.DecimalField(max_digits=12, decimal_places=4, default=Decimal('1.0000'))
     tasa_usdt = models.DecimalField(max_digits=12, decimal_places=4, default=Decimal('1.0000'))
@@ -77,6 +82,11 @@ class DetalleVenta(models.Model):
     # Costo y ganancia real calculados por FIFO
     costo_total_bs = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'))
     ganancia_bruta_bs = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'))
+    
+    # Valores congelados en USD al momento de la venta
+    subtotal_usd = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'))
+    costo_total_usd = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'))
+    ganancia_bruta_usd = models.DecimalField(max_digits=14, decimal_places=2, default=Decimal('0.00'))
 
     class Meta:
         verbose_name = "Detalle de Venta"

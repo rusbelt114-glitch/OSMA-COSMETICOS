@@ -91,7 +91,9 @@ def _serializar_entrada(e):
         'costo_unitario': float(e.costo_unitario),
         'precio_venta': float(e.precio_venta),
         'precio_mayor': float(e.precio_mayor or 0),
+        'precio_promo_mayor': float(e.precio_promo_mayor or 0),
         'precio_gran_mayor': float(e.precio_gran_mayor or 0),
+        'precio_promo_gran_mayor': float(e.precio_promo_gran_mayor or 0),
         'precio_promo_divisa': float(e.precio_promo_divisa or 0),
         'fecha': fecha_caracas.strftime("%d/%m/%Y"),
         'fecha_hora_12h': fecha_caracas.strftime("%d/%m/%Y %I:%M %p"),
@@ -147,7 +149,9 @@ def _crear_entrada(request):
         costo = Decimal(str(payload.get('costo_unitario', 0)))
         precio = Decimal(str(payload.get('precio_venta', 0)))
         precio_mayor = Decimal(str(payload.get('precio_mayor', 0) or 0))
+        precio_promo_mayor = Decimal(str(payload.get('precio_promo_mayor', 0) or 0))
         precio_gran_mayor = Decimal(str(payload.get('precio_gran_mayor', 0) or 0))
+        precio_promo_gran_mayor = Decimal(str(payload.get('precio_promo_gran_mayor', 0) or 0))
         precio_promo = Decimal(str(payload.get('precio_promo_divisa', 0) or 0))
         observaciones = payload.get('observaciones', '').strip()
 
@@ -176,7 +180,9 @@ def _crear_entrada(request):
             costo_unitario=costo,
             precio_venta=precio,
             precio_mayor=precio_mayor,
+            precio_promo_mayor=precio_promo_mayor,
             precio_gran_mayor=precio_gran_mayor,
+            precio_promo_gran_mayor=precio_promo_gran_mayor,
             precio_promo_divisa=precio_promo,
             observaciones=observaciones
         )
@@ -252,7 +258,9 @@ def api_lotes_disponibles(request):
         'cantidad_disponible': e.cantidad_disponible,
         'precio_venta': float(e.precio_venta),
         'precio_mayor': float(e.precio_mayor or 0),
+        'precio_promo_mayor': float(e.precio_promo_mayor or 0),
         'precio_gran_mayor': float(e.precio_gran_mayor or 0),
+        'precio_promo_gran_mayor': float(e.precio_promo_gran_mayor or 0),
         'precio_promo_divisa': float(e.precio_promo_divisa or 0),
         'costo_unitario': float(e.costo_unitario),
         'fecha': timezone.localtime(e.fecha_entrada, CARACAS_TZ).strftime("%d/%m/%Y"),
