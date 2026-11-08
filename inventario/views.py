@@ -40,26 +40,22 @@ def _obtener_rango_mes(mes_str):
         return None, None
 
 
+def _obtener_fechas_filtro(filtro, request):
+    if filtro == 'hoy':
+        ahora = timezone.now().astimezone(CARACAS_TZ)
+        return datetime.combine(ahora.date(), time.min, tzinfo=CARACAS_TZ), datetime.combine(ahora.date(), time.max, tzinfo=CARACAS_TZ)
+    if filtro == 'dia':
+        f_str = request.GET.get('fecha')
+        return _parse_fecha_caracas(f_str, fin_del_dia=False), _parse_fecha_caracas(f_str, fin_del_dia=True)
+    if filtro == 'mes':
+        return _obtener_rango_mes(request.GET.get('mes'))
+    return None, None
+
+
 def _filtrar_por_fecha(qs, request):
     filtro_fecha = request.GET.get('filtro_fecha', '').strip()
     if not filtro_fecha or filtro_fecha == 'all':
         return qs
-
-    ahora_caracas = timezone.now().astimezone(CARACAS_TZ)
-    if filtro_fecha == 'hoy':
-        inicio = datetime.combine(ahora_caracas.date(), time.min, tzinfo=CARACAS_TZ)
-        fin = datetime.combine(ahora_caracas.date(), time.max, tzinfo=CARACAS_TZ)
-        return qs.filter(fecha_entrada__gte=inicio, fecha_entrada__lte=fin)
-
-    if filtro_fecha == 'dia':
-        f_str = request.GET.get('fecha')
-        inicio = _parse_fecha_caracas(f_str, fin_del_dia=False)
-        fin = _parse_fecha_caracas(f_str, fin_del_dia=True)
-        return qs.filter(fecha_entrada__gte=inicio, fecha_entrada__lte=fin) if (inicio and fin) else qs
-
-    if filtro_fecha == 'mes':
-        inicio, fin = _obtener_rango_mes(request.GET.get('mes'))
-        return qs.filter(fecha_entrada__gte=inicio, fecha_entrada__lte=fin) if (inicio and fin) else qs
 
     if filtro_fecha == 'rango':
         desde_dt = _parse_fecha_caracas(request.GET.get('desde'), fin_del_dia=False)
@@ -70,6 +66,9 @@ def _filtrar_por_fecha(qs, request):
             qs = qs.filter(fecha_entrada__lte=hasta_dt)
         return qs
 
+    inicio, fin = _obtener_fechas_filtro(filtro_fecha, request)
+    if inicio and fin:
+        return qs.filter(fecha_entrada__gte=inicio, fecha_entrada__lte=fin)
     return qs
 
 
