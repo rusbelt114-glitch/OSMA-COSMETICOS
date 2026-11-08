@@ -371,7 +371,7 @@
 
         selectedProductId = p.id;
         $('name').value = p.nombre;
-        $('name').readOnly = true;
+        $('name').readOnly = false; // Permitir editar o corregir libremente
         $('minimum').value = p.stock_minimo;
         const rate = getBcvRate();
         if (p.ultimo_costo > 0) {
@@ -418,6 +418,15 @@
     }
 
     $('clear-selection').onclick = resetEntryForm;
+
+    if ($('name')) {
+        $('name').oninput = () => {
+            if (!$('name').value.trim()) {
+                selectedProductId = null;
+                if ($('clear-selection')) $('clear-selection').hidden = true;
+            }
+        };
+    }
 
     // Helper para conversión bidireccional USD <-> Bs con separador de miles
     function setupBidiPair(idUsd, idBs) {

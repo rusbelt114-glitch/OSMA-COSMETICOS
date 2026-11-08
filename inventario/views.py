@@ -1,5 +1,6 @@
 import json
 import math
+import calendar
 from decimal import Decimal
 from datetime import datetime, time
 from django.http import JsonResponse
@@ -26,11 +27,20 @@ def _parse_fecha_caracas(fecha_str, fin_del_dia=False):
     except (ValueError, TypeError):
         return None
 
-def _aplicar_filtros_entradas(qs, request):
-    q = request.GET.get('q', '').strip()
-    if q:
-        qs = qs.filter(producto__nombre_busqueda__icontains=normalizar_texto(q))
+def _obtener_rango_mes(mes_str):
+    if not mes_str or '-' not in mes_str:
+        return None, None
+    try:
+        y, m = map(int, mes_str.split('-'))
+        ultimo_dia = calendar.monthrange(y, m)[1]
+        inicio = datetime(y, m, 1, 0, 0, 0, tzinfo=CARACAS_TZ)
+        fin = datetime(y, m, ultimo_dia, 23, 59, 59, tzinfo=CARACAS_TZ)
+        return inicio, fin
+    except (ValueError, TypeError):
+        return None, None
 
+
+def _filtrar_por_fecha(qs, request):
     filtro_fecha = request.GET.get('filtro_fecha', '').strip()
     if not filtro_fecha or filtro_fecha == 'all':
         return qs
@@ -45,21 +55,11 @@ def _aplicar_filtros_entradas(qs, request):
         f_str = request.GET.get('fecha')
         inicio = _parse_fecha_caracas(f_str, fin_del_dia=False)
         fin = _parse_fecha_caracas(f_str, fin_del_dia=True)
-        if inicio and fin:
-            return qs.filter(fecha_entrada__gte=inicio, fecha_entrada__lte=fin)
+        return qs.filter(fecha_entrada__gte=inicio, fecha_entrada__lte=fin) if (inicio and fin) else qs
 
     if filtro_fecha == 'mes':
-        mes_str = request.GET.get('mes')
-        if mes_str and '-' in mes_str:
-            try:
-                y, m = map(int, mes_str.split('-'))
-                import calendar
-                ultimo_dia = calendar.monthrange(y, m)[1]
-                inicio = datetime(y, m, 1, 0, 0, 0, tzinfo=CARACAS_TZ)
-                fin = datetime(y, m, ultimo_dia, 23, 59, 59, tzinfo=CARACAS_TZ)
-                return qs.filter(fecha_entrada__gte=inicio, fecha_entrada__lte=fin)
-            except Exception:
-                pass
+        inicio, fin = _obtener_rango_mes(request.GET.get('mes'))
+        return qs.filter(fecha_entrada__gte=inicio, fecha_entrada__lte=fin) if (inicio and fin) else qs
 
     if filtro_fecha == 'rango':
         desde_dt = _parse_fecha_caracas(request.GET.get('desde'), fin_del_dia=False)
@@ -68,8 +68,16 @@ def _aplicar_filtros_entradas(qs, request):
             qs = qs.filter(fecha_entrada__gte=desde_dt)
         if hasta_dt:
             qs = qs.filter(fecha_entrada__lte=hasta_dt)
+        return qs
 
     return qs
+
+
+def _aplicar_filtros_entradas(qs, request):
+    q = request.GET.get('q', '').strip()
+    if q:
+        qs = qs.filter(producto__nombre_busqueda__icontains=normalizar_texto(q))
+    return _filtrar_por_fecha(qs, request)
 
 
 def _serializar_entrada(e):

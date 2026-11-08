@@ -133,10 +133,13 @@
                         <input id="lookup" type="search" placeholder="Nombre, tono o presentación" autocomplete="off">
                     </label>
                     <div class="full actions" id="suggest"></div>
-                    <label class="full">
-                        Nombre y presentación
+                    <div class="full" style="display: flex; flex-direction: column;">
+                        <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px;">
+                            <label for="name" style="margin: 0; font-weight: 500;">Nombre y presentación</label>
+                            <button type="button" class="link" id="clear-selection" hidden style="font-size: 0.82rem; color: #b3382c; text-decoration: underline; cursor: pointer; padding: 0;">✕ Limpiar / Producto nuevo</button>
+                        </div>
                         <input id="name" required maxlength="255" placeholder="Ej. Base Líquida Mate Tono 220 30ml">
-                    </label>
+                    </div>
                     <label>
                         Cantidad de unidades
                         <input id="quantity" type="number" min="1" max="10000" step="1" required placeholder="20">
@@ -190,7 +193,6 @@
                 </div>
                 <div style="margin-top: 14px; display: flex; gap: 8px;">
                     <button type="button" class="primary" id="btn-save-entry">Guardar entrada</button>
-                    <button type="button" class="secondary" id="clear-selection" hidden>Producto nuevo</button>
                 </div>
             </form>
         </div>
