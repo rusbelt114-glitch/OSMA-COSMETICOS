@@ -770,28 +770,6 @@
         return true;
     }
 
-        const existing = cart.find(x => x.producto_id === prodId);
-        const currentQtyInCart = existing ? existing.cantidad : 0;
-
-        if ((currentQtyInCart + unidades) > maxAvailable) {
-            info(`Solo quedan ${maxAvailable} unidades disponibles en total de "${prodName}". Tienes ${currentQtyInCart} en la venta actual.`, true);
-            return false;
-        }
-
-        if (existing) {
-            existing.cantidad += unidades;
-            existing.precio_unitario_bs = precioUnitario;
-        } else {
-            cart.push({
-                producto_id: prodId,
-                nombre: prodName,
-                cantidad: unidades,
-                precio_unitario_bs: precioUnitario
-            });
-        }
-        return true;
-    }
-
     $('add-cart').onclick = () => {
         const select = $('sell-product-select');
         const opt = select.options[select.selectedIndex];

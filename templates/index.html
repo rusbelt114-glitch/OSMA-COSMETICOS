@@ -19,7 +19,7 @@
             <span class="fixed-badge">Sistema Activo</span>
             <p>Osma Cosmetics · Punto de Venta</p>
             <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 5px; flex-wrap: wrap; align-items: center;">
-                <input type="file" id="global-restore-file" accept=".json,.xlsx" style="display: none;">
+                <input type="file" id="global-restore-file" accept=".json,.xlsx" style="display: none;" aria-label="Seleccionar archivo de copia de seguridad">
                 <button type="button" class="button secondary" id="btn-restore-header" style="padding: 6px 12px; font-size: .82rem;" title="Restaurar inventario desde un archivo de respaldo o Excel">
                     ↻ Restaurar copia
                 </button>
@@ -206,18 +206,18 @@
 
             <!-- Barra de búsqueda y filtros de fecha -->
             <div class="entry-history-toolbar">
-                <input id="entry-search" type="search" placeholder="🔍 Buscar por nombre de producto..." style="flex: 1; min-width: 180px;">
-                <select id="entry-date-filter">
+                <input id="entry-search" type="search" placeholder="🔍 Buscar por nombre de producto..." aria-label="Buscar entradas por nombre de producto" style="flex: 1; min-width: 180px;">
+                <select id="entry-date-filter" aria-label="Filtrar entradas por fecha">
                     <option value="all">Todas las entradas</option>
                     <option value="hoy">Hoy</option>
                     <option value="dia">Día específico</option>
                     <option value="mes">Mes</option>
                     <option value="rango">Rango de fechas</option>
                 </select>
-                <input type="date" id="entry-date-single" style="display: none;">
-                <input type="month" id="entry-date-month" style="display: none;">
-                <input type="date" id="entry-date-from" placeholder="Desde" style="display: none;">
-                <input type="date" id="entry-date-to" placeholder="Hasta" style="display: none;">
+                <input type="date" id="entry-date-single" aria-label="Fecha específica de entrada" style="display: none;">
+                <input type="month" id="entry-date-month" aria-label="Mes de entrada" style="display: none;">
+                <input type="date" id="entry-date-from" placeholder="Desde" aria-label="Fecha de entrada desde" style="display: none;">
+                <input type="date" id="entry-date-to" placeholder="Hasta" aria-label="Fecha de entrada hasta" style="display: none;">
                 <button type="button" class="secondary" id="btn-filter-entries">Filtrar</button>
                 <button type="button" class="secondary" id="btn-reset-entries">Limpiar</button>
             </div>
