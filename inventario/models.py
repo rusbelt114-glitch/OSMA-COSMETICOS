@@ -26,6 +26,24 @@ class EntradaMercancia(models.Model):
         decimal_places=2,
         verbose_name="Precio de venta unitario (Bs)"
     )
+    precio_mayor = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        verbose_name="Precio al mayor unitario (Bs)"
+    )
+    precio_gran_mayor = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        verbose_name="Precio al gran mayor unitario (Bs)"
+    )
+    precio_promo_divisa = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        verbose_name="Precio promo divisa unitario (Bs)"
+    )
     fecha_entrada = models.DateTimeField(
         default=timezone.now,
         db_index=True,

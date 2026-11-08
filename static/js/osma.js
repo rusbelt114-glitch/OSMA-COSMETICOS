@@ -379,6 +379,18 @@
             $('price').value = fmt(p.ultimo_precio);
             if ($('price-usd') && rate > 0) $('price-usd').value = fmt(p.ultimo_precio / rate);
         }
+        if (p.ultimo_precio_mayor > 0) {
+            if ($('price-mayor')) $('price-mayor').value = fmt(p.ultimo_precio_mayor);
+            if ($('price-mayor-usd') && rate > 0) $('price-mayor-usd').value = fmt(p.ultimo_precio_mayor / rate);
+        }
+        if (p.ultimo_precio_gran_mayor > 0) {
+            if ($('price-gran-mayor')) $('price-gran-mayor').value = fmt(p.ultimo_precio_gran_mayor);
+            if ($('price-gran-mayor-usd') && rate > 0) $('price-gran-mayor-usd').value = fmt(p.ultimo_precio_gran_mayor / rate);
+        }
+        if (p.ultimo_precio_promo > 0) {
+            if ($('price-promo')) $('price-promo').value = fmt(p.ultimo_precio_promo);
+            if ($('price-promo-usd') && rate > 0) $('price-promo-usd').value = fmt(p.ultimo_precio_promo / rate);
+        }
         $('clear-selection').hidden = false;
         $('suggest').innerHTML = '';
         info(`Producto "${p.nombre}" seleccionado. Ingresa la nueva cantidad recibida.`);
@@ -394,72 +406,57 @@
         $('minimum').value = '3';
         if ($('cost-usd')) $('cost-usd').value = '';
         if ($('price-usd')) $('price-usd').value = '';
+        if ($('price-mayor-usd')) $('price-mayor-usd').value = '';
+        if ($('price-mayor')) $('price-mayor').value = '';
+        if ($('price-gran-mayor-usd')) $('price-gran-mayor-usd').value = '';
+        if ($('price-gran-mayor')) $('price-gran-mayor').value = '';
+        if ($('price-promo-usd')) $('price-promo-usd').value = '';
+        if ($('price-promo')) $('price-promo').value = '';
     }
 
     $('clear-selection').onclick = resetEntryForm;
 
-    // Conversión bidireccional USD <-> Bs en Entrada de Mercancía con separador de miles
-    if ($('cost-usd')) {
-        $('cost-usd').oninput = () => {
-            const valUsd = parseMoney($('cost-usd').value);
+    // Helper para conversión bidireccional USD <-> Bs con separador de miles
+    function setupBidiPair(idUsd, idBs) {
+        const elUsd = $(idUsd);
+        const elBs = $(idBs);
+        if (!elUsd || !elBs) return;
+
+        elUsd.oninput = () => {
+            const valUsd = parseMoney(elUsd.value);
             const rate = getBcvRate();
             if (valUsd > 0) {
-                $('cost').value = fmt(valUsd * rate);
-            } else if ($('cost-usd').value.trim() === '') {
-                $('cost').value = '';
+                elBs.value = fmt(valUsd * rate);
+            } else if (elUsd.value.trim() === '') {
+                elBs.value = '';
             }
         };
-        $('cost-usd').onblur = () => {
-            const v = parseMoney($('cost-usd').value);
-            if (v > 0) $('cost-usd').value = fmt(v);
+        elUsd.onblur = () => {
+            const v = parseMoney(elUsd.value);
+            if (v > 0) elUsd.value = fmt(v);
         };
-    }
-    if ($('cost')) {
-        $('cost').oninput = () => {
-            const valBs = parseMoney($('cost').value);
+
+        elBs.oninput = () => {
+            const valBs = parseMoney(elBs.value);
             const rate = getBcvRate();
             if (valBs > 0 && rate > 0) {
-                if ($('cost-usd')) $('cost-usd').value = fmt(valBs / rate);
-            } else if ($('cost').value.trim() === '') {
-                if ($('cost-usd')) $('cost-usd').value = '';
+                elUsd.value = fmt(valBs / rate);
+            } else if (elBs.value.trim() === '') {
+                elUsd.value = '';
             }
         };
-        $('cost').onblur = () => {
-            const v = parseMoney($('cost').value);
-            if (v > 0) $('cost').value = fmt(v);
+        elBs.onblur = () => {
+            const v = parseMoney(elBs.value);
+            if (v > 0) elBs.value = fmt(v);
         };
     }
 
-    if ($('price-usd')) {
-        $('price-usd').oninput = () => {
-            const valUsd = parseMoney($('price-usd').value);
-            const rate = getBcvRate();
-            if (valUsd > 0) {
-                $('price').value = fmt(valUsd * rate);
-            } else if ($('price-usd').value.trim() === '') {
-                $('price').value = '';
-            }
-        };
-        $('price-usd').onblur = () => {
-            const v = parseMoney($('price-usd').value);
-            if (v > 0) $('price-usd').value = fmt(v);
-        };
-    }
-    if ($('price')) {
-        $('price').oninput = () => {
-            const valBs = parseMoney($('price').value);
-            const rate = getBcvRate();
-            if (valBs > 0 && rate > 0) {
-                if ($('price-usd')) $('price-usd').value = fmt(valBs / rate);
-            } else if ($('price').value.trim() === '') {
-                if ($('price-usd')) $('price-usd').value = '';
-            }
-        };
-        $('price').onblur = () => {
-            const v = parseMoney($('price').value);
-            if (v > 0) $('price').value = fmt(v);
-        };
-    }
+    // Configuración de pares de conversión en Entrada
+    setupBidiPair('cost-usd', 'cost');
+    setupBidiPair('price-usd', 'price');
+    setupBidiPair('price-mayor-usd', 'price-mayor');
+    setupBidiPair('price-gran-mayor-usd', 'price-gran-mayor');
+    setupBidiPair('price-promo-usd', 'price-promo');
 
 
     async function handleSaveEntry(e) {
@@ -469,6 +466,9 @@
         const stock_minimo = Number.parseInt($('minimum').value, 10) || 3;
         const costo_unitario = parseMoney($('cost').value);
         const precio_venta = parseMoney($('price').value);
+        const precio_mayor = $('price-mayor') ? parseMoney($('price-mayor').value) : 0;
+        const precio_gran_mayor = $('price-gran-mayor') ? parseMoney($('price-gran-mayor').value) : 0;
+        const precio_promo_divisa = $('price-promo') ? parseMoney($('price-promo').value) : 0;
 
         if (!nombre) {
             info('Por favor indica el nombre del producto.', true);
@@ -504,6 +504,9 @@
                     stock_minimo: stock_minimo,
                     costo_unitario: costo_unitario,
                     precio_venta: precio_venta,
+                    precio_mayor: precio_mayor,
+                    precio_gran_mayor: precio_gran_mayor,
+                    precio_promo_divisa: precio_promo_divisa,
                     confirmar_coincidencia: window._confirmarCoincidenciaEntrada || false
                 })
             });
@@ -637,6 +640,49 @@
         }
     }
 
+    let currentSaleMode = 'detal';
+
+    function getPriceForProduct(p) {
+        const isPromo = $('chk-promo-divisa') && $('chk-promo-divisa').checked;
+        if (isPromo && p.ultimo_precio_promo > 0) {
+            return p.ultimo_precio_promo;
+        }
+        if (currentSaleMode === 'mayor' && p.ultimo_precio_mayor > 0) {
+            return p.ultimo_precio_mayor;
+        }
+        if (currentSaleMode === 'gran_mayor' && p.ultimo_precio_gran_mayor > 0) {
+            return p.ultimo_precio_gran_mayor;
+        }
+        return p.ultimo_precio;
+    }
+
+    function setSaleMode(mode) {
+        currentSaleMode = mode;
+        const buttons = [
+            { id: 'btn-mode-detal', mode: 'detal' },
+            { id: 'btn-mode-mayor', mode: 'mayor' },
+            { id: 'btn-mode-gran-mayor', mode: 'gran_mayor' }
+        ];
+        buttons.forEach(b => {
+            const el = $(b.id);
+            if (el) {
+                if (b.mode === mode) {
+                    el.style.background = '#376d5e';
+                    el.style.color = '#fff';
+                } else {
+                    el.style.background = '#f0f0ee';
+                    el.style.color = '#444';
+                }
+            }
+        });
+        renderSellProductChoices();
+    }
+
+    if ($('btn-mode-detal')) $('btn-mode-detal').onclick = () => setSaleMode('detal');
+    if ($('btn-mode-mayor')) $('btn-mode-mayor').onclick = () => setSaleMode('mayor');
+    if ($('btn-mode-gran-mayor')) $('btn-mode-gran-mayor').onclick = () => setSaleMode('gran_mayor');
+    if ($('chk-promo-divisa')) $('chk-promo-divisa').onchange = () => renderSellProductChoices();
+
     function renderSellProductChoices() {
         const select = $('sell-product-select');
         const searchVal = norm($('sell-search').value);
@@ -654,9 +700,15 @@
 
         const rBcv = getBcvRate();
         select.innerHTML = availableProds.map(p => {
-            const precioUsd = rBcv > 0 ? (p.ultimo_precio / rBcv) : 0;
-            return `<option value="${p.id}" data-price="${p.ultimo_precio}" data-prod="${p.id}" data-max="${p.stock_total}">
-                ${esc(p.nombre)} · ${p.stock_total} disp. en total - Bs ${fmt(p.ultimo_precio)} (≈ USD $ ${fmt(precioUsd)})
+            const precioBs = getPriceForProduct(p);
+            const precioUsd = rBcv > 0 ? (precioBs / rBcv) : 0;
+            let tag = '';
+            if ($('chk-promo-divisa') && $('chk-promo-divisa').checked && p.ultimo_precio_promo > 0) tag = ' · [Promo]';
+            else if (currentSaleMode === 'mayor') tag = ' · [Mayor]';
+            else if (currentSaleMode === 'gran_mayor') tag = ' · [Gran Mayor]';
+
+            return `<option value="${p.id}" data-price="${precioBs}" data-prod="${p.id}" data-max="${p.stock_total}">
+                ${esc(p.nombre)} · ${p.stock_total} disp. en total - Bs ${fmt(precioBs)} (≈ USD $ ${fmt(precioUsd)})${tag}
             </option>`;
         }).join('');
 
@@ -680,41 +732,43 @@
     };
 
     // Conversión bidireccional USD <-> Bs en precio de venta en caja con separador de miles
-    if ($('sell-unit-price-usd')) {
-        $('sell-unit-price-usd').oninput = () => {
-            const valUsd = parseMoney($('sell-unit-price-usd').value);
-            const rate = getBcvRate();
-            if (valUsd > 0) {
-                $('sell-unit-price').value = fmt(valUsd * rate);
-            } else if ($('sell-unit-price-usd').value.trim() === '') {
-                $('sell-unit-price').value = '';
-            }
-        };
-        $('sell-unit-price-usd').onblur = () => {
-            const v = parseMoney($('sell-unit-price-usd').value);
-            if (v > 0) $('sell-unit-price-usd').value = fmt(v);
-        };
-    }
-    if ($('sell-unit-price')) {
-        $('sell-unit-price').oninput = () => {
-            const valBs = parseMoney($('sell-unit-price').value);
-            const rate = getBcvRate();
-            if (valBs > 0 && rate > 0) {
-                if ($('sell-unit-price-usd')) $('sell-unit-price-usd').value = fmt(valBs / rate);
-            } else if ($('sell-unit-price').value.trim() === '') {
-                if ($('sell-unit-price-usd')) $('sell-unit-price-usd').value = '';
-            }
-        };
-        $('sell-unit-price').onblur = () => {
-            const v = parseMoney($('sell-unit-price').value);
-            if (v > 0) $('sell-unit-price').value = fmt(v);
-        };
-    }
+    setupBidiPair('sell-unit-price-usd', 'sell-unit-price');
 
     function _agregarProductoAlCarrito(opt, unidades, precioUnitario) {
         const prodId = Number(opt.dataset.prod || opt.value);
         const maxAvailable = Number(opt.dataset.max);
-        const prodName = opt.text.split('·')[0].trim();
+        let prodName = opt.text.split('·')[0].trim();
+
+        let modeTag = '';
+        if ($('chk-promo-divisa') && $('chk-promo-divisa').checked) modeTag = ' (Promo)';
+        else if (currentSaleMode === 'mayor') modeTag = ' (Mayor)';
+        else if (currentSaleMode === 'gran_mayor') modeTag = ' (Gran Mayor)';
+
+        const pObj = allProducts.find(x => x.id === prodId);
+        if (!pObj) {
+            info('Producto no encontrado.', true);
+            return false;
+        }
+
+        const enCarrito = cart.filter(c => c.producto_id === prodId).reduce((acc, c) => acc + c.cantidad, 0);
+        if (enCarrito + unidades > maxAvailable) {
+            info(`Stock insuficiente para "${prodName}". Disponible: ${maxAvailable}, ya en venta: ${enCarrito}.`, true);
+            return false;
+        }
+
+        const existente = cart.find(c => c.producto_id === prodId && c.precio_unitario_bs === precioUnitario && c.nombre === (prodName + modeTag));
+        if (existente) {
+            existente.cantidad += unidades;
+        } else {
+            cart.push({
+                producto_id: prodId,
+                nombre: prodName + modeTag,
+                cantidad: unidades,
+                precio_unitario_bs: precioUnitario
+            });
+        }
+        return true;
+    }
 
         const existing = cart.find(x => x.producto_id === prodId);
         const currentQtyInCart = existing ? existing.cantidad : 0;
@@ -1045,6 +1099,26 @@
         }
     }
 
+    let stockPriceView = 'detal';
+
+    function setStockPriceView(view) {
+        stockPriceView = view;
+        document.querySelectorAll('.stock-filter-btn').forEach(btn => {
+            if (btn.dataset.view === view) {
+                btn.style.background = '#376d5e';
+                btn.style.color = '#fff';
+            } else {
+                btn.style.background = '';
+                btn.style.color = '';
+            }
+        });
+        renderStockList();
+    }
+
+    document.querySelectorAll('.stock-filter-btn').forEach(btn => {
+        btn.onclick = () => setStockPriceView(btn.dataset.view);
+    });
+
     function renderStockList() {
         const query = norm($('stock-search').value);
         const visible = allProducts.filter(p => norm(p.nombre).includes(query));
@@ -1055,6 +1129,7 @@
             return;
         }
 
+        const bcvRate = getBcvRate();
         listEl.innerHTML = visible.map(p => {
             const isLow = p.stock_total <= p.stock_minimo;
             const isZero = p.stock_total === 0;
@@ -1067,15 +1142,40 @@
                 estadoTexto = 'Reponer';
             }
 
-            const bcvRate = window.RATES?.usd_bcv || 1;
-            const precioUsd = bcvRate > 0 ? (p.ultimo_precio / bcvRate) : 0;
+            let precioInfoHtml = '';
+            if (stockPriceView === 'detal') {
+                const usd = bcvRate > 0 ? (p.ultimo_precio / bcvRate) : 0;
+                precioInfoHtml = `Precio Detal: <b>Bs ${fmt(p.ultimo_precio)}</b> <span style="color: #2b5c4f; font-weight: 600;">(≈ USD $ ${fmt(usd)})</span>`;
+            } else if (stockPriceView === 'mayor') {
+                const pm = p.ultimo_precio_mayor > 0 ? p.ultimo_precio_mayor : p.ultimo_precio;
+                const usd = bcvRate > 0 ? (pm / bcvRate) : 0;
+                precioInfoHtml = `Precio Mayor: <b>Bs ${fmt(pm)}</b> <span style="color: #2b5c4f; font-weight: 600;">(≈ USD $ ${fmt(usd)})</span>`;
+            } else if (stockPriceView === 'gran_mayor') {
+                const pgm = p.ultimo_precio_gran_mayor > 0 ? p.ultimo_precio_gran_mayor : p.ultimo_precio;
+                const usd = bcvRate > 0 ? (pgm / bcvRate) : 0;
+                precioInfoHtml = `Precio Gran Mayor: <b>Bs ${fmt(pgm)}</b> <span style="color: #2b5c4f; font-weight: 600;">(≈ USD $ ${fmt(usd)})</span>`;
+            } else {
+                const uDetal = bcvRate > 0 ? fmt(p.ultimo_precio / bcvRate) : '0,00';
+                const uMayor = p.ultimo_precio_mayor > 0 ? fmt(p.ultimo_precio_mayor / bcvRate) : '-';
+                const uGranMayor = p.ultimo_precio_gran_mayor > 0 ? fmt(p.ultimo_precio_gran_mayor / bcvRate) : '-';
+                const uPromo = p.ultimo_precio_promo > 0 ? fmt(p.ultimo_precio_promo / bcvRate) : '-';
+
+                precioInfoHtml = `
+                    <div style="font-size: 0.8rem; display: flex; gap: 8px; flex-wrap: wrap; margin-top: 3px;">
+                        <span>Detal: <b>$${uDetal}</b></span> · 
+                        <span>Mayor: <b>$${uMayor}</b></span> · 
+                        <span>Gran Mayor: <b>$${uGranMayor}</b></span> · 
+                        <span style="color: #2d5a4c;">Promo: <b>$${uPromo}</b></span>
+                    </div>
+                `;
+            }
 
             return `
                 <div class="row" style="align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line);">
                     <div style="flex: 1; padding-right: 10px;">
                         <b class="product-title-wrap" style="display: block;">${esc(p.nombre)}</b>
                         <small style="display: block; color: var(--muted); margin-top: 3px;">
-                            ${p.stock_total} unidades disponibles · mínimo de alerta: ${p.stock_minimo} · Precio: Bs ${fmt(p.ultimo_precio)} <span style="color: #2b5c4f; font-weight: 600;">(≈ USD $ ${fmt(precioUsd)})</span>
+                            ${p.stock_total} unidades disponibles · mínimo de alerta: ${p.stock_minimo} · ${precioInfoHtml}
                         </small>
                         <div class="track" style="margin-top: 6px;">
                             <div class="bar ${isLow ? 'warnbar' : ''}" style="width: ${barWidth}%"></div>

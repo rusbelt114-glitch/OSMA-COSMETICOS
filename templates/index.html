@@ -154,14 +154,39 @@
                         <input id="cost" inputmode="decimal" required placeholder="0,00">
                     </label>
                     <label>
-                        Precio venta · USD ($)
+                        Precio venta (Detal) · USD ($)
                         <input id="price-usd" inputmode="decimal" placeholder="0,00">
                     </label>
                     <label>
-                        Precio venta · Bs
+                        Precio venta (Detal) · Bs
                         <input id="price" inputmode="decimal" required placeholder="0,00">
                     </label>
-                    <p class="muted full" style="font-size: 0.8rem; margin: -4px 0 6px 0;">💡 <b>Conversión automática:</b> Puedes escribir en Dólares ($) o en Bolívares (Bs); el sistema calcula automáticamente el cambio a la tasa oficial del día.</p>
+
+                    <!-- Precios adicionales: Mayor, Gran Mayor y Promo Divisa -->
+                    <div class="full" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; background: #fafaf8; padding: 12px; border-radius: 6px; border: 1px solid var(--line); margin-top: 4px;">
+                        <div>
+                            <span style="font-size: 0.82rem; font-weight: 600; color: #1a4d40; display: block; margin-bottom: 4px;">📦 Precio al Mayor</span>
+                            <div style="display: flex; gap: 6px;">
+                                <label style="flex: 1; margin: 0; font-size: 0.78rem;">USD ($)<input id="price-mayor-usd" inputmode="decimal" placeholder="0,00"></label>
+                                <label style="flex: 1; margin: 0; font-size: 0.78rem;">Bs<input id="price-mayor" inputmode="decimal" placeholder="0,00"></label>
+                            </div>
+                        </div>
+                        <div>
+                            <span style="font-size: 0.82rem; font-weight: 600; color: #1a4d40; display: block; margin-bottom: 4px;">🏢 Precio Gran Mayor</span>
+                            <div style="display: flex; gap: 6px;">
+                                <label style="flex: 1; margin: 0; font-size: 0.78rem;">USD ($)<input id="price-gran-mayor-usd" inputmode="decimal" placeholder="0,00"></label>
+                                <label style="flex: 1; margin: 0; font-size: 0.78rem;">Bs<input id="price-gran-mayor" inputmode="decimal" placeholder="0,00"></label>
+                            </div>
+                        </div>
+                        <div>
+                            <span style="font-size: 0.82rem; font-weight: 600; color: #2d5a4c; display: block; margin-bottom: 4px;">💵 Promo Divisa (Efectivo)</span>
+                            <div style="display: flex; gap: 6px;">
+                                <label style="flex: 1; margin: 0; font-size: 0.78rem;">USD ($)<input id="price-promo-usd" inputmode="decimal" placeholder="0,00"></label>
+                                <label style="flex: 1; margin: 0; font-size: 0.78rem;">Bs<input id="price-promo" inputmode="decimal" placeholder="0,00"></label>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="muted full" style="font-size: 0.8rem; margin: 4px 0 6px 0;">💡 <b>Conversión automática:</b> Puedes escribir en Dólares ($) o en Bolívares (Bs); el sistema calcula automáticamente el cambio a la tasa oficial del día en todos los precios.</p>
                 </div>
                 <div style="margin-top: 14px; display: flex; gap: 8px;">
                     <button type="button" class="primary" id="btn-save-entry">Guardar entrada</button>
@@ -218,6 +243,25 @@
                 <h2>Registrar venta</h2>
             </div>
             <span class="muted">Control automático de inventario</span>
+        </div>
+
+        <!-- Sub-pestañas: Detal / Mayor / Gran Mayor + Promo Divisa -->
+        <div class="sale-mode-nav" style="display: flex; gap: 8px; margin: 10px 0 16px 0; border-bottom: 2px solid var(--line); padding-bottom: 10px; flex-wrap: wrap; align-items: center;">
+            <button type="button" class="sale-mode-btn" data-mode="detal" id="btn-mode-detal" style="padding: 7px 14px; border-radius: 6px; font-weight: 600; cursor: pointer; border: 1px solid var(--line); background: #376d5e; color: #fff; font-size: 0.88rem;">
+                🛒 Venta al Detal
+            </button>
+            <button type="button" class="sale-mode-btn" data-mode="mayor" id="btn-mode-mayor" style="padding: 7px 14px; border-radius: 6px; font-weight: 600; cursor: pointer; border: 1px solid var(--line); background: #f0f0ee; color: #444; font-size: 0.88rem;">
+                📦 Venta al Mayor
+            </button>
+            <button type="button" class="sale-mode-btn" data-mode="gran_mayor" id="btn-mode-gran-mayor" style="padding: 7px 14px; border-radius: 6px; font-weight: 600; cursor: pointer; border: 1px solid var(--line); background: #f0f0ee; color: #444; font-size: 0.88rem;">
+                🏢 Venta al Gran Mayor
+            </button>
+            <div style="margin-left: auto; display: flex; align-items: center; gap: 8px;">
+                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.85rem; font-weight: 600; color: #1a4d40; background: #eaf5f0; padding: 6px 12px; border-radius: 6px; border: 1px solid #c2e2d4; margin: 0;">
+                    <input type="checkbox" id="chk-promo-divisa" style="width: auto; margin: 0; cursor: pointer;">
+                    💵 Aplicar Promo Divisa
+                </label>
+            </div>
         </div>
         <div class="layout">
             <div class="card">
@@ -333,6 +377,22 @@
             </div>
         </div>
         <div class="card">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 12px;">
+                <div style="display: flex; gap: 6px; flex-wrap: wrap;" id="stock-price-view-filters">
+                    <button type="button" class="secondary stock-filter-btn" data-view="detal" style="padding: 5px 12px; font-size: 0.82rem; font-weight: 600; background: #376d5e; color: #fff;">
+                        Detal
+                    </button>
+                    <button type="button" class="secondary stock-filter-btn" data-view="mayor" style="padding: 5px 12px; font-size: 0.82rem; font-weight: 600;">
+                        Mayor
+                    </button>
+                    <button type="button" class="secondary stock-filter-btn" data-view="gran_mayor" style="padding: 5px 12px; font-size: 0.82rem; font-weight: 600;">
+                        Gran Mayor
+                    </button>
+                    <button type="button" class="secondary stock-filter-btn" data-view="todos" style="padding: 5px 12px; font-size: 0.82rem; font-weight: 600;">
+                        Todos los precios
+                    </button>
+                </div>
+            </div>
             <label>
                 Buscar en inventario
                 <input id="stock-search" type="search" placeholder="Nombre, marca o tono">

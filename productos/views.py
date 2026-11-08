@@ -19,6 +19,9 @@ def _listar_productos(request):
     ultimas_entradas = EntradaMercancia.objects.filter(producto=OuterRef('pk')).order_by('-fecha_entrada', '-id')
     sub_precio = Subquery(ultimas_entradas.values('precio_venta')[:1], output_field=DecimalField())
     sub_costo = Subquery(ultimas_entradas.values('costo_unitario')[:1], output_field=DecimalField())
+    sub_precio_mayor = Subquery(ultimas_entradas.values('precio_mayor')[:1], output_field=DecimalField())
+    sub_precio_gran_mayor = Subquery(ultimas_entradas.values('precio_gran_mayor')[:1], output_field=DecimalField())
+    sub_precio_promo = Subquery(ultimas_entradas.values('precio_promo_divisa')[:1], output_field=DecimalField())
 
     productos_qs = Producto.objects.all()
     if solo_activos:
@@ -34,7 +37,10 @@ def _listar_productos(request):
             output_field=IntegerField()
         ),
         ult_precio=sub_precio,
-        ult_costo=sub_costo
+        ult_costo=sub_costo,
+        ult_precio_mayor=sub_precio_mayor,
+        ult_precio_gran_mayor=sub_precio_gran_mayor,
+        ult_precio_promo=sub_precio_promo
     )
 
     data = []
@@ -56,6 +62,9 @@ def _listar_productos(request):
             'activo': p.activo,
             'ultimo_precio': float(p.ult_precio or 0),
             'ultimo_costo': float(p.ult_costo or 0),
+            'ultimo_precio_mayor': float(p.ult_precio_mayor or 0),
+            'ultimo_precio_gran_mayor': float(p.ult_precio_gran_mayor or 0),
+            'ultimo_precio_promo': float(p.ult_precio_promo or 0),
         })
 
     return JsonResponse({'productos': data})
