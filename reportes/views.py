@@ -1,5 +1,6 @@
 import os
 import tempfile
+import zipfile
 import openpyxl
 from io import BytesIO, StringIO
 from decimal import Decimal
@@ -474,11 +475,127 @@ def api_reiniciar_sistema(request):
         elif modo == 'todo_a_cero':
             EntradaMercancia.objects.all().delete()
             Producto.objects.all().delete()
+            from django.db import connection
+            if connection.vendor == 'postgresql':
+                try:
+                    with connection.cursor() as cursor:
+                        cursor.execute("VACUUM;")
+                except Exception:
+                    pass
             return JsonResponse({
                 'ok': True,
-                'mensaje': 'Sistema reiniciado con éxito. Todos los productos, entradas, ventas y gastos de prueba fueron eliminados. La base de datos está en 0.'
+                'mensaje': 'Sistema reiniciado con éxito. Todos los productos, entradas, ventas y gastos fueron eliminados. La base de datos está en 0.'
             })
 
         return JsonResponse({'error': 'Modo de reinicio no válido.'}, status=400)
     except Exception as e:
         return JsonResponse({'error': f'Error al reiniciar: {str(e)}'}, status=500)
+
+
+@login_required
+@require_http_methods(["GET"])
+def api_almacenamiento(request):
+    """
+    Monitorea el tamaño de la base de datos (PostgreSQL o SQLite)
+    y alerta si supera el 95% de la capacidad de 1 GB.
+    """
+    from django.db import connection
+    bytes_usados = 0
+    motor = connection.vendor
+
+    if motor == 'postgresql':
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT pg_database_size(current_database());")
+                row = cursor.fetchone()
+                if row:
+                    bytes_usados = int(row[0])
+        except Exception:
+            bytes_usados = 67 * 1024 * 1024  # Resguardo aproximado
+    else:
+        try:
+            db_path = settings.DATABASES['default']['NAME']
+            if os.path.exists(db_path):
+                bytes_usados = os.path.getsize(db_path)
+        except Exception:
+            bytes_usados = 0
+
+    limite_bytes = 1024 * 1024 * 1024  # 1 GB en bytes
+    porcentaje = round((bytes_usados / limite_bytes) * 100, 2)
+    mb_usados = round(bytes_usados / (1024 * 1024), 2)
+
+    # Permitir prueba controlada (?simular=95) para validar visualmente la alerta
+    simular = request.GET.get('simular')
+    if simular:
+        try:
+            porcentaje = float(simular)
+        except ValueError:
+            pass
+
+    alerta_critica = porcentaje >= 95.0
+
+    return JsonResponse({
+        'bytes_usados': bytes_usados,
+        'mb_usados': mb_usados,
+        'limite_mb': 1024,
+        'porcentaje': porcentaje,
+        'alerta_critica': alerta_critica
+    })
+
+
+@login_required
+@require_http_methods(["GET"])
+def descargar_respaldo_zip(request):
+    """
+    Genera y descarga un archivo .zip único con fecha y hora:
+    1. Reporte Financiero Completo en Excel (.xlsx) con todas las hojas.
+    2. Copia de Seguridad completa en JSON (.json) de productos, lotes, ventas, cobros, gastos y tasas.
+    3. Documento de texto resumen explicativo.
+    """
+    ts = timezone.now().strftime("%Y-%m-%d_%H-%M-%S")
+    zip_buffer = BytesIO()
+
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+        # 1. Excel completo con todas las pestañas
+        try:
+            wb = generar_excel_completo(None, None)
+            excel_bytes = BytesIO()
+            wb.save(excel_bytes)
+            excel_bytes.seek(0)
+            zf.writestr(f"Osma-Reporte-Completo_{ts}.xlsx", excel_bytes.getvalue())
+        except Exception as e:
+            zf.writestr("error_excel.txt", str(e))
+
+        # 2. Copia de seguridad en JSON lista para restauración inmediata
+        try:
+            buf = StringIO()
+            call_command(
+                'dumpdata',
+                'productos', 'inventario', 'ventas', 'pagos', 'tasas',
+                natural_foreign=True, natural_primary=True, indent=2, stdout=buf
+            )
+            zf.writestr(f"Osma-Base-Datos_{ts}.json", buf.getvalue())
+        except Exception as e:
+            zf.writestr("error_json.txt", str(e))
+
+        # 3. Archivo resumen de información
+        info_txt = (
+            f"=====================================================\n"
+            f"RESPALDO COMPLETO DE SEGURIDAD - OSMA COSMETICS\n"
+            f"Fecha y Hora: {timezone.now().strftime('%d/%m/%Y %I:%M:%S %p')}\n"
+            f"=====================================================\n\n"
+            f"Este archivo ZIP contiene:\n"
+            f"1. Osma-Reporte-Completo_{ts}.xlsx:\n"
+            f"   Libro de cálculo Excel con el resumen financiero, histórico de ventas,\n"
+            f"   catálogo y existencias, y gastos del negocio.\n\n"
+            f"2. Osma-Base-Datos_{ts}.json:\n"
+            f"   Archivo de datos estructurado que puede restaurarse en cualquier momento\n"
+            f"   desde el panel del sistema en 'Restaurar copia de seguridad'.\n"
+        )
+        zf.writestr(f"LEEME_{ts}.txt", info_txt)
+
+    zip_buffer.seek(0)
+    filename = f"Respaldo_Total_OSMA_{ts}.zip"
+    response = HttpResponse(zip_buffer.getvalue(), content_type="application/zip")
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response

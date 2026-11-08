@@ -110,13 +110,20 @@
             const res = await fetch('/api/tasas/');
             const data = await res.json();
             if (data.usd_bcv) {
+                window.INITIAL_RATES = window.INITIAL_RATES || {};
+                window.INITIAL_RATES.usd_bcv = data.usd_bcv;
                 if ($('bar-usd-rate')) $('bar-usd-rate').textContent = 'Bs ' + fmt(data.usd_bcv);
                 // Si hay un cobro en curso con carrito activo, NO sobreescribir la tasa congelada
                 if (!window.saleRatesFrozen && $('rate-usd')) {
                     $('rate-usd').value = fmt(data.usd_bcv);
                 }
+                if ($('expense-rate') && document.activeElement !== $('expense-rate')) {
+                    $('expense-rate').value = fmt(data.usd_bcv);
+                }
             }
             if (data.usdt) {
+                window.INITIAL_RATES = window.INITIAL_RATES || {};
+                window.INITIAL_RATES.usdt = data.usdt;
                 if ($('bar-usdt-rate')) $('bar-usdt-rate').textContent = 'Bs ' + fmt(data.usdt);
                 if (!window.saleRatesFrozen && $('rate-usdt')) {
                     $('rate-usdt').value = fmt(data.usdt);
@@ -145,6 +152,8 @@
                 if (data.exito) {
                     info('Tasas actualizadas exitosamente con el BCV.');
                     await loadRates();
+                    void loadInventoryMetrics();
+                    void loadReport();
                 } else {
                     info(data.mensaje || 'No se pudo conectar al BCV. Se conservó la última tasa válida.', true);
                 }
@@ -154,6 +163,83 @@
             } finally {
                 $('btn-sync-rates').disabled = false;
                 $('btn-sync-rates').textContent = '⟳ Actualizar tasas BCV';
+            }
+        };
+    }
+
+    // Modal y control de tasa manual
+    const modalRates = $('modal-edit-rates');
+    if ($('btn-edit-rates')) {
+        $('btn-edit-rates').onclick = () => {
+            if ($('manual-rate-usd')) {
+                const curUsd = window.INITIAL_RATES && window.INITIAL_RATES.usd_bcv ? window.INITIAL_RATES.usd_bcv : 0;
+                $('manual-rate-usd').value = curUsd > 0 ? fmt(curUsd) : '';
+            }
+            if ($('manual-rate-usdt')) {
+                const curUsdt = window.INITIAL_RATES && window.INITIAL_RATES.usdt ? window.INITIAL_RATES.usdt : 0;
+                $('manual-rate-usdt').value = curUsdt > 0 ? fmt(curUsdt) : '';
+            }
+            if (modalRates) {
+                if (typeof modalRates.showModal === 'function') {
+                    modalRates.showModal();
+                } else {
+                    modalRates.style.display = 'block';
+                }
+            }
+        };
+    }
+
+    if ($('btn-cancel-manual-rate')) {
+        $('btn-cancel-manual-rate').onclick = () => {
+            if (modalRates) {
+                if (typeof modalRates.close === 'function') modalRates.close();
+                else modalRates.style.display = 'none';
+            }
+        };
+    }
+
+    if ($('btn-save-manual-rate')) {
+        $('btn-save-manual-rate').onclick = async () => {
+            const rawUsd = $('manual-rate-usd') ? parseMoney($('manual-rate-usd').value) : 0;
+            const rawUsdt = $('manual-rate-usdt') ? parseMoney($('manual-rate-usdt').value) : 0;
+
+            if (rawUsd <= 0) {
+                info('Por favor ingresa una tasa USD válida mayor a 0.', true);
+                return;
+            }
+
+            $('btn-save-manual-rate').disabled = true;
+            $('btn-save-manual-rate').textContent = 'Guardando...';
+
+            try {
+                const res = await fetch('/api/tasas/actualizar/', {
+                    method: 'POST',
+                    headers: getHeaders(),
+                    body: JSON.stringify({
+                        manual: true,
+                        usd_bcv: rawUsd,
+                        usdt: rawUsdt > 0 ? rawUsdt : null
+                    })
+                });
+                const data = await res.json();
+                if (data.exito || res.ok) {
+                    if (modalRates) {
+                        if (typeof modalRates.close === 'function') modalRates.close();
+                        else modalRates.style.display = 'none';
+                    }
+                    info('Tasa manual guardada a Bs ' + fmt(rawUsd) + '. Todo el sistema fue recalculado.');
+                    await loadRates();
+                    void loadInventoryMetrics();
+                    void loadReport();
+                } else {
+                    info(data.error || data.mensaje || 'Error al guardar la tasa.', true);
+                }
+            } catch (e) {
+                console.error('Error guardando tasa manual:', e);
+                info('No se pudo guardar la tasa manual.', true);
+            } finally {
+                $('btn-save-manual-rate').disabled = false;
+                $('btn-save-manual-rate').textContent = 'Guardar y Recalcular';
             }
         };
     }
@@ -1350,6 +1436,12 @@
             if ($('profit-value')) $('profit-value').textContent = 'Bs ' + fmt(data.total_ganancia);
             if ($('profit-value-usd')) $('profit-value-usd').textContent = '≈ USD $ ' + fmt(data.total_ganancia_usd || 0);
 
+            const totalGastos = (data.total_gastos_general !== undefined) ? data.total_gastos_general : ((data.total_gastos_tienda || 0) + (data.total_gastos_personal || 0));
+            const totalGastosUsd = (data.total_gastos_general_usd !== undefined) ? data.total_gastos_general_usd : ((data.total_gastos_tienda_usd || 0) + (data.total_gastos_personal_usd || 0));
+
+            if ($('expenses-total-metric')) $('expenses-total-metric').textContent = 'Bs ' + fmt(totalGastos);
+            if ($('expenses-total-metric-usd')) $('expenses-total-metric-usd').textContent = '≈ USD $ ' + fmt(totalGastosUsd);
+
             if ($('expenses-store-metric')) $('expenses-store-metric').textContent = 'Bs ' + fmt(data.total_gastos_tienda || 0);
             if ($('expenses-store-metric-usd')) $('expenses-store-metric-usd').textContent = '≈ USD $ ' + fmt(data.total_gastos_tienda_usd || 0);
 
@@ -1648,7 +1740,8 @@
         loadEntries(1),
         loadLots(),
         loadInventoryMetrics(),
-        loadExpenses()
+        loadExpenses(),
+        checkStorage()
     ]).catch(err => console.error('Error inicializando:', err));
 
     // -------------------------------------------------------------------------
@@ -1672,6 +1765,7 @@
                     await loadExpenses();
                     await loadInventoryMetrics();
                     await loadReport();
+                    void checkStorage();
                 } else {
                     info(data.error || 'Error al reiniciar ventas.', true);
                 }
@@ -1703,12 +1797,95 @@
                     await loadExpenses();
                     await loadInventoryMetrics();
                     await loadReport();
+                    void checkStorage();
                 } else {
                     info(data.error || 'Error al reiniciar todo.', true);
                 }
             } catch (e) {
                 console.error(e);
             }
+        };
+    }
+
+    // -------------------------------------------------------------------------
+    // 07 · CONTROL DE ALMACENAMIENTO (LÍMITE 1 GB) Y RESPALDO TOTAL EN ZIP
+    // -------------------------------------------------------------------------
+    async function checkStorage() {
+        try {
+            const res = await fetch('/api/sistema/almacenamiento/');
+            if (!res.ok) return;
+            const data = await res.json();
+
+            if (data.alerta_critica) {
+                if ($('storage-alert-box')) $('storage-alert-box').style.display = 'block';
+                if ($('storage-percentage-text')) $('storage-percentage-text').textContent = data.porcentaje + '%';
+            } else {
+                if ($('storage-alert-box')) $('storage-alert-box').style.display = 'none';
+            }
+
+            if ($('storage-status-tag')) {
+                $('storage-status-tag').textContent = `Memoria BD: ${data.mb_usados} MB / ${data.limite_mb} MB (${data.porcentaje}%)`;
+                if (data.alerta_critica) {
+                    $('storage-status-tag').style.background = '#ffe5e5';
+                    $('storage-status-tag').style.color = '#b3382c';
+                }
+            }
+        } catch (e) {
+            console.log('Error consultando almacenamiento:', e);
+        }
+    }
+
+    async function backupZipAndReset() {
+        if (!confirm('¿Deseas descargar el Respaldo Total en ZIP y reiniciar la memoria a 0?\n\n1. Se descargará de inmediato un paquete .ZIP con el Excel completo y la copia JSON de todo el negocio.\n2. Inmediatamente después, la base de datos se reiniciará a 0 para que el 1 GB quede 100% libre para seguir usándolo.\n\n¿Deseas continuar?')) {
+            return;
+        }
+
+        // Paso 1: Iniciar descarga del ZIP
+        window.location.href = '/reportes/respaldo-zip/';
+        info('Generando y descargando paquete ZIP con todo el negocio...');
+
+        // Paso 2: Tras 2.5 seg para que el navegador inicie la descarga, reiniciar a 0
+        setTimeout(async () => {
+            try {
+                const res = await fetch('/api/sistema/reiniciar/', {
+                    method: 'POST',
+                    headers: getHeaders(),
+                    body: JSON.stringify({ modo: 'todo_a_cero' })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    info('¡Respaldo ZIP descargado y base de datos reiniciada a 0! Memoria liberada.');
+                    await Promise.all([
+                        loadProducts(),
+                        loadEntries(1),
+                        loadLots(),
+                        loadExpenses(),
+                        loadInventoryMetrics(),
+                        loadReport(),
+                        checkStorage()
+                    ]);
+                } else {
+                    info(data.error || 'Error al reiniciar la base de datos.', true);
+                }
+            } catch (e) {
+                console.error('Error durante el reinicio tras ZIP:', e);
+                info('Error de conexión al intentar reiniciar.', true);
+            }
+        }, 2500);
+    }
+
+    if ($('btn-alert-backup-zip')) {
+        $('btn-alert-backup-zip').onclick = backupZipAndReset;
+    }
+
+    if ($('btn-backup-zip-reset-section')) {
+        $('btn-backup-zip-reset-section').onclick = backupZipAndReset;
+    }
+
+    if ($('btn-manual-backup-zip')) {
+        $('btn-manual-backup-zip').onclick = () => {
+            info('Generando paquete ZIP completo (Excel + Base de datos JSON)...');
+            window.location.href = '/reportes/respaldo-zip/';
         };
     }
 })();

@@ -38,9 +38,49 @@
             <span>Tasa USDT: <b id="bar-usdt-rate">Bs {{ tasa_usdt|floatformat:2 }}</b></span>
             <small class="muted" id="rates-updated-text">Actualizado automáticamente</small>
         </div>
-        <button type="button" class="secondary" id="btn-sync-rates" style="padding: 5px 12px; font-size: .78rem;">
-            ⟳ Actualizar tasas BCV
-        </button>
+        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+            <button type="button" class="secondary" id="btn-sync-rates" style="padding: 5px 12px; font-size: .78rem;">
+                ⟳ Actualizar tasas BCV
+            </button>
+            <button type="button" class="secondary" id="btn-edit-rates" style="padding: 5px 12px; font-size: .78rem;">
+                ✎ Editar tasa manual
+            </button>
+        </div>
+    </div>
+
+    <!-- Modal para editar tasa manual -->
+    <dialog id="modal-edit-rates" style="border: 1px solid var(--line); border-radius: 8px; padding: 20px; max-width: 380px; width: 90%; box-shadow: 0 8px 30px rgba(0,0,0,0.15); background: #ffffff;">
+        <h4 style="margin-top: 0; color: #1a4d40;">Ajustar Tasa Manual</h4>
+        <p class="muted" style="font-size: 0.85rem; margin-bottom: 12px;">Ingresa el nuevo valor en Bolívares. Al guardar, todo el sistema recalculará precios, ventas e inventario al instante.</p>
+        <label style="display: block; margin-top: 10px; font-size: 0.88rem;">
+            Tasa USD (Bs / USD)
+            <input type="text" id="manual-rate-usd" inputmode="decimal" placeholder="Ej: 920,50" style="width: 100%; margin-top: 4px; padding: 8px; box-sizing: border-box;">
+        </label>
+        <label style="display: block; margin-top: 10px; font-size: 0.88rem;">
+            Tasa USDT (Bs / USDT · Opcional)
+            <input type="text" id="manual-rate-usdt" inputmode="decimal" placeholder="Ej: 1020,00" style="width: 100%; margin-top: 4px; padding: 8px; box-sizing: border-box;">
+        </label>
+        <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px;">
+            <button type="button" class="secondary" id="btn-cancel-manual-rate" style="padding: 6px 14px;">Cancelar</button>
+            <button type="button" id="btn-save-manual-rate" style="background: #376d5e; color: #fff; border: none; padding: 6px 16px; border-radius: 6px; cursor: pointer; font-weight: 600;">Guardar y Recalcular</button>
+        </div>
+    </dialog>
+
+    <!-- Alerta crítica de almacenamiento al 95% -->
+    <div id="storage-alert-box" style="display: none; background: #fff0f0; border: 2px solid #b3382c; border-radius: 8px; margin: 12px 20px; padding: 16px 20px; color: #731e17;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+            <div>
+                <strong style="font-size: 1.05rem; display: block; color: #b3382c;">
+                    ALERTA: Capacidad de almacenamiento al <span id="storage-percentage-text">95%</span> de 1 GB
+                </strong>
+                <p style="margin: 4px 0 0 0; font-size: 0.88rem; color: #555;">
+                    Para evitar bloqueos por espacio lleno, descarga el respaldo total en ZIP y reinicia la base de datos a 0 para seguir usándola ilimitadamente.
+                </p>
+            </div>
+            <button type="button" id="btn-alert-backup-zip" style="background: #b3382c; color: #fff; font-weight: bold; padding: 10px 18px; border-radius: 6px; cursor: pointer; border: none; font-size: 0.88rem;">
+                Descargar Respaldo ZIP y Reiniciar a 0
+            </button>
+        </div>
     </div>
 
     <section class="hero">
@@ -436,49 +476,31 @@
         <!-- A · Resumen financiero del período seleccionado -->
         <div class="card" style="margin-top: 14px;">
             <h3>A · Resumen Financiero del Período Seleccionado</h3>
-            <p class="muted">Cálculo claro y directo en Bolívares y Dólares de las ventas, costos, gastos de tienda y retiros del dueño.</p>
+            <p class="muted">Cálculo directo en Bolívares y Dólares de las ventas, costos de reposición y gastos del negocio.</p>
             <div class="metrics" style="margin-top: 10px;">
                 <div class="metric">
-                    <small>Total Vendido (Ingresos)</small>
+                    <small>Total Cobrado (Ventas)</small>
                     <strong id="sales-value">Bs 0,00</strong>
                     <div id="sales-value-usd" style="font-size: 0.95rem; font-weight: 600; color: #2d5a4c; margin: 3px 0;">≈ USD $ 0,00</div>
                     <small><span id="sold-count">0</span> unidades vendidas</small>
                 </div>
                 <div class="metric">
-                    <small>Inversión en lo Vendido (Costo)</small>
+                    <small>Dinero para Reponer Mercancía</small>
                     <strong id="cost-value" style="color: #666;">Bs 0,00</strong>
                     <div id="cost-value-usd" style="font-size: 0.95rem; font-weight: 600; color: #666; margin: 3px 0;">≈ USD $ 0,00</div>
                     <small>Lo que costó comprar los productos vendidos</small>
                 </div>
                 <div class="metric">
-                    <small>Ganancia sobre Ventas</small>
-                    <strong id="profit-value" style="color: #376d5e;">Bs 0,00</strong>
-                    <div id="profit-value-usd" style="font-size: 0.95rem; font-weight: 600; color: #376d5e; margin: 3px 0;">≈ USD $ 0,00</div>
-                    <small>Total Vendido − Inversión en mercancía</small>
-                </div>
-                <div class="metric">
-                    <small>Gastos de la Tienda (Operativo)</small>
-                    <strong id="expenses-store-metric" style="color: #b3382c;">Bs 0,00</strong>
-                    <div id="expenses-store-metric-usd" style="font-size: 0.95rem; font-weight: 600; color: #b3382c; margin: 3px 0;">≈ USD $ 0,00</div>
-                    <small>Alquiler, bolsas, comida, luz, servicios</small>
-                </div>
-                <div class="metric">
-                    <small>Ganancia Libre de la Tienda</small>
-                    <strong id="net-profit-value" style="color: #1a4d40;">Bs 0,00</strong>
-                    <div id="net-profit-value-usd" style="font-size: 0.95rem; font-weight: 600; color: #1a4d40; margin: 3px 0;">≈ USD $ 0,00</div>
-                    <small>Ganancia de ventas − Gastos de tienda</small>
-                </div>
-                <div class="metric">
-                    <small>Retiros del Dueño (Gastos Personales)</small>
-                    <strong id="expenses-personal-metric" style="color: #8c52ff;">Bs 0,00</strong>
-                    <div id="expenses-personal-metric-usd" style="font-size: 0.95rem; font-weight: 600; color: #8c52ff; margin: 3px 0;">≈ USD $ 0,00</div>
-                    <small>Dinero que el dueño sacó para su bolsillo</small>
+                    <small>Gastos del Negocio y Retiros</small>
+                    <strong id="expenses-total-metric" style="color: #b3382c;">Bs 0,00</strong>
+                    <div id="expenses-total-metric-usd" style="font-size: 0.95rem; font-weight: 600; color: #b3382c; margin: 3px 0;">≈ USD $ 0,00</div>
+                    <small>Gastos del local y retiros personales</small>
                 </div>
                 <div class="metric" id="box-balance-real" style="border: 2px solid #376d5e; background: #f4fbf8;">
-                    <small>Saldo Final en Caja / Negocio</small>
+                    <small>Ganancia Real Limpia (En Caja)</small>
                     <strong id="balance-real-metric" style="color: #1a4d40;">Bs 0,00</strong>
                     <div id="balance-real-metric-usd" style="font-size: 1rem; font-weight: 700; color: #1a4d40; margin: 3px 0;">≈ USD $ 0,00</div>
-                    <small id="balance-real-note">Ganancia libre − Retiros del dueño</small>
+                    <small id="balance-real-note">Ganancia restante a favor del negocio</small>
                 </div>
             </div>
         </div>
@@ -503,19 +525,19 @@
                     <small>Piezas físicas para vender</small>
                 </div>
                 <div class="metric">
-                    <small>Inversión en Inventario (Costo)</small>
+                    <small>Capital Invertido en Mercancía</small>
                     <strong id="inv-cost-value">Bs 0,00</strong>
                     <div id="inv-cost-value-usd" style="font-size: 0.95rem; font-weight: 600; color: #666; margin: 3px 0;">≈ USD $ 0,00</div>
                     <small>Dinero invertido en comprar la mercancía actual</small>
                 </div>
                 <div class="metric">
-                    <small>Venta Total Esperada</small>
+                    <small>Valor de Venta en Mostrador</small>
                     <strong id="inv-potential-sale" style="color: #2b5c4f;">Bs 0,00</strong>
                     <div id="inv-potential-sale-usd" style="font-size: 0.95rem; font-weight: 600; color: #2b5c4f; margin: 3px 0;">≈ USD $ 0,00</div>
                     <small>Total a cobrar si vendes todo el inventario</small>
                 </div>
                 <div class="metric" style="border: 2px solid #2b5c4f; background: #f2f9f6;">
-                    <small>Ganancia Total Esperada</small>
+                    <small>Ganancia Proyectada al Vender Todo</small>
                     <strong id="inv-potential-profit" style="color: #1a4d40;">Bs 0,00</strong>
                     <div id="inv-potential-profit-usd" style="font-size: 1rem; font-weight: 700; color: #1a4d40; margin: 3px 0;">≈ USD $ 0,00</div>
                     <small>Venta Esperada − Inversión (Ganancia limpia)</small>
@@ -553,19 +575,28 @@
         <div class="card" style="margin-top: 14px; border: 1px dashed #d97736; background: #fffaf5;">
             <div style="display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px;">
                 <div>
-                    <h3 style="margin: 0; color: #b3382c;">⚙️ Preparación y Limpieza de Datos (Empezar de 0)</h3>
-                    <span class="muted">Herramientas para reiniciar pruebas y dejar el sistema 100% listo para ventas reales.</span>
+                    <h3 style="margin: 0; color: #b3382c;">⚙️ Preparación, Respaldo y Almacenamiento</h3>
+                    <span class="muted">Herramientas de respaldo total, control de memoria (1 GB) y reinicio seguro del sistema.</span>
                 </div>
+                <span id="storage-status-tag" style="font-size: 0.8rem; background: #eee; padding: 4px 8px; border-radius: 4px; font-weight: 600;">
+                    Memoria: Calculando...
+                </span>
             </div>
             <p style="margin-top: 10px; font-size: 0.88rem; color: #555;">
-                Si realizaste pruebas con ventas, gastos o productos ficticios, utiliza estas opciones para dejar el sistema limpio:
+                Descarga un paquete completo con tu catálogo, ventas y finanzas, o limpia datos de prueba para dejar el sistema 100% listo:
             </p>
             <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px;">
+                <button type="button" class="secondary" id="btn-manual-backup-zip" style="border-color: #2b5c4f; color: #1a4d40; font-weight: 600;">
+                    📦 Descargar Respaldo Total (.ZIP)
+                </button>
+                <button type="button" class="secondary" id="btn-backup-zip-reset-section" style="border-color: #b3382c; color: #b3382c; font-weight: 600;">
+                    🔄 Descargar ZIP y Reiniciar a 0 (Liberar 1 GB)
+                </button>
                 <button type="button" class="secondary" id="btn-reset-sales-only" style="border-color: #8c52ff; color: #6a2cd8;">
                     🧹 Limpiar solo ventas y gastos (Restaurar existencias)
                 </button>
-                <button type="button" class="secondary" id="btn-reset-all-zero" style="border-color: #b3382c; color: #b3382c;">
-                    ⚠️ Empezar de 0 (Borrar todos los productos y ventas de prueba)
+                <button type="button" class="secondary" id="btn-reset-all-zero" style="border-color: #777; color: #444;">
+                    ⚠️ Empezar de 0 sin respaldo previo
                 </button>
             </div>
         </div>

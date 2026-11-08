@@ -10,7 +10,7 @@ from tasas.views import api_tasas, api_actualizar_tasas
 from pagos.views import api_gastos, api_eliminar_gasto
 from reportes.views import (
     api_reporte_resumen, descargar_excel_reporte, descargar_copia_seguridad, 
-    api_restaurar_copia, api_reiniciar_sistema
+    api_restaurar_copia, api_reiniciar_sistema, api_almacenamiento, descargar_respaldo_zip
 )
 
 urlpatterns = [
@@ -40,7 +40,9 @@ urlpatterns = [
     path('api/reportes/resumen/', api_reporte_resumen, name='api_reporte_resumen'),
     path('api/reportes/restaurar/', api_restaurar_copia, name='api_restaurar_copia'),
     
-    # Descargas
+    # Descargas y Almacenamiento
+    path('api/sistema/almacenamiento/', api_almacenamiento, name='api_almacenamiento'),
     path('reportes/excel/', descargar_excel_reporte, name='descargar_excel_reporte'),
     path('reportes/copia-seguridad/', descargar_copia_seguridad, name='descargar_copia_seguridad'),
+    path('reportes/respaldo-zip/', descargar_respaldo_zip, name='descargar_respaldo_zip'),
 ]

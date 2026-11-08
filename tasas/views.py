@@ -34,20 +34,33 @@ def api_actualizar_tasas(request):
             nueva_usdt = body.get('usdt')
 
             if nueva_usd:
+                valor_usd = Decimal(str(nueva_usd).replace(',', '.').strip())
+                if valor_usd <= Decimal('0'):
+                    return JsonResponse({'error': 'La tasa USD debe ser un número positivo mayor a 0.'}, status=400)
                 HistorialTasa.objects.create(
                     tipo='USD_BCV',
-                    valor=Decimal(str(nueva_usd)),
+                    valor=valor_usd,
                     fuente='Ajuste Manual',
                     es_manual=True
                 )
             if nueva_usdt:
-                HistorialTasa.objects.create(
-                    tipo='USDT',
-                    valor=Decimal(str(nueva_usdt)),
-                    fuente='Ajuste Manual',
-                    es_manual=True
-                )
-            return JsonResponse({'mensaje': 'Tasas ajustadas manualmente con éxito.'})
+                valor_usdt = Decimal(str(nueva_usdt).replace(',', '.').strip())
+                if valor_usdt > Decimal('0'):
+                    HistorialTasa.objects.create(
+                        tipo='USDT',
+                        valor=valor_usdt,
+                        fuente='Ajuste Manual',
+                        es_manual=True
+                    )
+            
+            tasa_bcv_actual = HistorialTasa.obtener_ultima_tasa('USD_BCV')
+            tasa_usdt_actual = HistorialTasa.obtener_ultima_tasa('USDT')
+            return JsonResponse({
+                'exito': True,
+                'mensaje': 'Tasas ajustadas manualmente con éxito.',
+                'usd_bcv': float(tasa_bcv_actual),
+                'usdt': float(tasa_usdt_actual)
+            })
         else:
             res = sincronizar_tasas_en_linea()
             return JsonResponse(res)
