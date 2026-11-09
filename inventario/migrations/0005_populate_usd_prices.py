@@ -33,3 +33,4 @@ class Migration(migrations.Migration):
     operations = [
         migrations.RunPython(popular_precios_usd, migrations.RunPython.noop),
     ]
+

@@ -86,40 +86,55 @@ def _listar_productos(request):
         t_ant = float(p.ult_tasa or 0)
         t_ref = t_ant if t_ant > 0 else t_act_float
 
+        # Precios estipulados fijos: se mantienen estáticos tanto en USD como en Bs
         pv_usd = float(p.ult_precio_usd or 0)
-        if pv_usd <= 0 and (p.ult_precio or 0) > 0:
-            pv_usd = round(float(p.ult_precio) / t_ref, 2)
-        pv_bs = round(pv_usd * t_act_float, 2) if pv_usd > 0 else float(p.ult_precio or 0)
+        pv_bs = float(p.ult_precio or 0)
+        if pv_usd <= 0 and pv_bs > 0:
+            pv_usd = round(pv_bs / t_ref, 2)
+        if pv_bs <= 0 and pv_usd > 0:
+            pv_bs = round(pv_usd * t_ref, 2)
 
         cu_usd = float(p.ult_costo_usd or 0)
-        if cu_usd <= 0 and (p.ult_costo or 0) > 0:
-            cu_usd = round(float(p.ult_costo) / t_ref, 2)
-        cu_bs = round(cu_usd * t_act_float, 2) if cu_usd > 0 else float(p.ult_costo or 0)
+        cu_bs = float(p.ult_costo or 0)
+        if cu_usd <= 0 and cu_bs > 0:
+            cu_usd = round(cu_bs / t_ref, 2)
+        if cu_bs <= 0 and cu_usd > 0:
+            cu_bs = round(cu_usd * t_ref, 2)
 
         pm_usd = float(p.ult_precio_mayor_usd or 0)
-        if pm_usd <= 0 and (p.ult_precio_mayor or 0) > 0:
-            pm_usd = round(float(p.ult_precio_mayor) / t_ref, 2)
-        pm_bs = round(pm_usd * t_act_float, 2) if pm_usd > 0 else float(p.ult_precio_mayor or 0)
+        pm_bs = float(p.ult_precio_mayor or 0)
+        if pm_usd <= 0 and pm_bs > 0:
+            pm_usd = round(pm_bs / t_ref, 2)
+        if pm_bs <= 0 and pm_usd > 0:
+            pm_bs = round(pm_usd * t_ref, 2)
 
         ppm_usd = float(p.ult_precio_promo_mayor_usd or 0)
-        if ppm_usd <= 0 and (p.ult_precio_promo_mayor or 0) > 0:
-            ppm_usd = round(float(p.ult_precio_promo_mayor) / t_ref, 2)
-        ppm_bs = round(ppm_usd * t_act_float, 2) if ppm_usd > 0 else float(p.ult_precio_promo_mayor or 0)
+        ppm_bs = float(p.ult_precio_promo_mayor or 0)
+        if ppm_usd <= 0 and ppm_bs > 0:
+            ppm_usd = round(ppm_bs / t_ref, 2)
+        if ppm_bs <= 0 and ppm_usd > 0:
+            ppm_bs = round(ppm_usd * t_ref, 2)
 
         pgm_usd = float(p.ult_precio_gran_mayor_usd or 0)
-        if pgm_usd <= 0 and (p.ult_precio_gran_mayor or 0) > 0:
-            pgm_usd = round(float(p.ult_precio_gran_mayor) / t_ref, 2)
-        pgm_bs = round(pgm_usd * t_act_float, 2) if pgm_usd > 0 else float(p.ult_precio_gran_mayor or 0)
+        pgm_bs = float(p.ult_precio_gran_mayor or 0)
+        if pgm_usd <= 0 and pgm_bs > 0:
+            pgm_usd = round(pgm_bs / t_ref, 2)
+        if pgm_bs <= 0 and pgm_usd > 0:
+            pgm_bs = round(pgm_usd * t_ref, 2)
 
         ppgm_usd = float(p.ult_precio_promo_gran_mayor_usd or 0)
-        if ppgm_usd <= 0 and (p.ult_precio_promo_gran_mayor or 0) > 0:
-            ppgm_usd = round(float(p.ult_precio_promo_gran_mayor) / t_ref, 2)
-        ppgm_bs = round(ppgm_usd * t_act_float, 2) if ppgm_usd > 0 else float(p.ult_precio_promo_gran_mayor or 0)
+        ppgm_bs = float(p.ult_precio_promo_gran_mayor or 0)
+        if ppgm_usd <= 0 and ppgm_bs > 0:
+            ppgm_usd = round(ppgm_bs / t_ref, 2)
+        if ppgm_bs <= 0 and ppgm_usd > 0:
+            ppgm_bs = round(ppgm_usd * t_ref, 2)
 
         pp_usd = float(p.ult_precio_promo_usd or 0)
-        if pp_usd <= 0 and (p.ult_precio_promo or 0) > 0:
-            pp_usd = round(float(p.ult_precio_promo) / t_ref, 2)
-        pp_bs = round(pp_usd * t_act_float, 2) if pp_usd > 0 else float(p.ult_precio_promo or 0)
+        pp_bs = float(p.ult_precio_promo or 0)
+        if pp_usd <= 0 and pp_bs > 0:
+            pp_usd = round(pp_bs / t_ref, 2)
+        if pp_bs <= 0 and pp_usd > 0:
+            pp_bs = round(pp_usd * t_ref, 2)
 
         data.append({
             'id': p.id,

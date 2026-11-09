@@ -373,13 +373,10 @@
         $('name').value = p.nombre;
         $('name').readOnly = false; // Permitir editar o corregir libremente
         $('minimum').value = p.stock_minimo;
-        const rate = getBcvRate();
 
         const setFieldVal = (idUsd, idBs, valUsd, valBs) => {
-            const u = valUsd > 0 ? valUsd : (rate > 0 && valBs > 0 ? valBs / rate : 0);
-            const b = u > 0 && rate > 0 ? u * rate : valBs;
-            if ($(idUsd) && u > 0) $(idUsd).value = fmt(u);
-            if ($(idBs) && b > 0) $(idBs).value = fmt(b);
+            if ($(idUsd)) $(idUsd).value = valUsd > 0 ? fmt(valUsd) : '';
+            if ($(idBs)) $(idBs).value = valBs > 0 ? fmt(valBs) : '';
         };
 
         setFieldVal('cost-usd', 'cost', p.ultimo_costo_usd, p.ultimo_costo);
@@ -676,33 +673,22 @@
 
     function getPriceUsdForProduct(p) {
         const isPromo = $('chk-promo-divisa') && $('chk-promo-divisa').checked;
-        const rate = getBcvRate() || 1;
         if (currentSaleMode === 'mayor') {
             if (isPromo && p.ultimo_precio_promo_mayor_usd > 0) return p.ultimo_precio_promo_mayor_usd;
-            if (isPromo && p.ultimo_precio_promo_mayor > 0) return p.ultimo_precio_promo_mayor / rate;
             if (p.ultimo_precio_mayor_usd > 0) return p.ultimo_precio_mayor_usd;
-            if (p.ultimo_precio_mayor > 0) return p.ultimo_precio_mayor / rate;
-            return p.ultimo_precio_usd || (p.ultimo_precio / rate);
+            return p.ultimo_precio_usd || 0;
         }
         if (currentSaleMode === 'gran_mayor') {
             if (isPromo && p.ultimo_precio_promo_gran_mayor_usd > 0) return p.ultimo_precio_promo_gran_mayor_usd;
-            if (isPromo && p.ultimo_precio_promo_gran_mayor > 0) return p.ultimo_precio_promo_gran_mayor / rate;
             if (p.ultimo_precio_gran_mayor_usd > 0) return p.ultimo_precio_gran_mayor_usd;
-            if (p.ultimo_precio_gran_mayor > 0) return p.ultimo_precio_gran_mayor / rate;
-            return p.ultimo_precio_usd || (p.ultimo_precio / rate);
+            return p.ultimo_precio_usd || 0;
         }
         // Modo Detal por defecto
         if (isPromo && p.ultimo_precio_promo_usd > 0) return p.ultimo_precio_promo_usd;
-        if (isPromo && p.ultimo_precio_promo > 0) return p.ultimo_precio_promo / rate;
-        return p.ultimo_precio_usd || (p.ultimo_precio / rate);
+        return p.ultimo_precio_usd || 0;
     }
 
     function getPriceForProduct(p) {
-        const rate = getBcvRate();
-        const pUsd = getPriceUsdForProduct(p);
-        if (pUsd > 0 && rate > 0) {
-            return Math.round(pUsd * rate * 100) / 100;
-        }
         const isPromo = $('chk-promo-divisa') && $('chk-promo-divisa').checked;
         if (currentSaleMode === 'mayor') {
             if (isPromo && p.ultimo_precio_promo_mayor > 0) return p.ultimo_precio_promo_mayor;
@@ -763,8 +749,9 @@
 
         const rBcv = getBcvRate();
         select.innerHTML = availableProds.map(p => {
-            const precioUsd = getPriceUsdForProduct(p);
-            const precioBs = rBcv > 0 && precioUsd > 0 ? Math.round(precioUsd * rBcv * 100) / 100 : getPriceForProduct(p);
+            const precioBs = getPriceForProduct(p);
+            let precioUsd = getPriceUsdForProduct(p);
+            if (!precioUsd && rBcv > 0 && precioBs > 0) precioUsd = Math.round((precioBs / rBcv) * 100) / 100;
             let tag = '';
             const isPromo = $('chk-promo-divisa') && $('chk-promo-divisa').checked;
             if (currentSaleMode === 'mayor') {
@@ -776,7 +763,7 @@
             }
 
             return `<option value="${p.id}" data-price="${precioBs}" data-usd="${precioUsd}" data-prod="${p.id}" data-max="${p.stock_total}">
-                ${esc(p.nombre)} · ${p.stock_total} disp. en total - Bs ${fmt(precioBs)} (≈ USD $ ${fmt(precioUsd)})${tag}
+                ${esc(p.nombre)} · ${p.stock_total} disp. en total - Bs ${fmt(precioBs)} (USD $ ${fmt(precioUsd)})${tag}
             </option>`;
         }).join('');
 

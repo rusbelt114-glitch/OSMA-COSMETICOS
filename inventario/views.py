@@ -300,39 +300,53 @@ def api_lotes_disponibles(request):
     for e in entradas:
         t_ant = e.tasa_al_momento if (e.tasa_al_momento and e.tasa_al_momento > Decimal('0.00')) else tasa_bcv
         pv_usd = float(e.precio_venta_usd or 0)
-        if pv_usd <= 0 and e.precio_venta > 0:
-            pv_usd = round(float(e.precio_venta) / float(t_ant), 2)
-        pv_bs = round(pv_usd * float(tasa_bcv), 2) if pv_usd > 0 else float(e.precio_venta)
+        pv_bs = float(e.precio_venta)
+        if pv_usd <= 0 and pv_bs > 0:
+            pv_usd = round(pv_bs / float(t_ant), 2)
+        if pv_bs <= 0 and pv_usd > 0:
+            pv_bs = round(pv_usd * float(t_ant), 2)
 
         pm_usd = float(e.precio_mayor_usd or 0)
-        if pm_usd <= 0 and (e.precio_mayor or 0) > 0:
-            pm_usd = round(float(e.precio_mayor) / float(t_ant), 2)
-        pm_bs = round(pm_usd * float(tasa_bcv), 2) if pm_usd > 0 else float(e.precio_mayor or 0)
+        pm_bs = float(e.precio_mayor or 0)
+        if pm_usd <= 0 and pm_bs > 0:
+            pm_usd = round(pm_bs / float(t_ant), 2)
+        if pm_bs <= 0 and pm_usd > 0:
+            pm_bs = round(pm_usd * float(t_ant), 2)
 
         ppm_usd = float(e.precio_promo_mayor_usd or 0)
-        if ppm_usd <= 0 and (e.precio_promo_mayor or 0) > 0:
-            ppm_usd = round(float(e.precio_promo_mayor) / float(t_ant), 2)
-        ppm_bs = round(ppm_usd * float(tasa_bcv), 2) if ppm_usd > 0 else float(e.precio_promo_mayor or 0)
+        ppm_bs = float(e.precio_promo_mayor or 0)
+        if ppm_usd <= 0 and ppm_bs > 0:
+            ppm_usd = round(ppm_bs / float(t_ant), 2)
+        if ppm_bs <= 0 and ppm_usd > 0:
+            ppm_bs = round(ppm_usd * float(t_ant), 2)
 
         pgm_usd = float(e.precio_gran_mayor_usd or 0)
-        if pgm_usd <= 0 and (e.precio_gran_mayor or 0) > 0:
-            pgm_usd = round(float(e.precio_gran_mayor) / float(t_ant), 2)
-        pgm_bs = round(pgm_usd * float(tasa_bcv), 2) if pgm_usd > 0 else float(e.precio_gran_mayor or 0)
+        pgm_bs = float(e.precio_gran_mayor or 0)
+        if pgm_usd <= 0 and pgm_bs > 0:
+            pgm_usd = round(pgm_bs / float(t_ant), 2)
+        if pgm_bs <= 0 and pgm_usd > 0:
+            pgm_bs = round(pgm_usd * float(t_ant), 2)
 
         ppgm_usd = float(e.precio_promo_gran_mayor_usd or 0)
-        if ppgm_usd <= 0 and (e.precio_promo_gran_mayor or 0) > 0:
-            ppgm_usd = round(float(e.precio_promo_gran_mayor) / float(t_ant), 2)
-        ppgm_bs = round(ppgm_usd * float(tasa_bcv), 2) if ppgm_usd > 0 else float(e.precio_promo_gran_mayor or 0)
+        ppgm_bs = float(e.precio_promo_gran_mayor or 0)
+        if ppgm_usd <= 0 and ppgm_bs > 0:
+            ppgm_usd = round(ppgm_bs / float(t_ant), 2)
+        if ppgm_bs <= 0 and ppgm_usd > 0:
+            ppgm_bs = round(ppgm_usd * float(t_ant), 2)
 
         pp_usd = float(e.precio_promo_divisa_usd or 0)
-        if pp_usd <= 0 and (e.precio_promo_divisa or 0) > 0:
-            pp_usd = round(float(e.precio_promo_divisa) / float(t_ant), 2)
-        pp_bs = round(pp_usd * float(tasa_bcv), 2) if pp_usd > 0 else float(e.precio_promo_divisa or 0)
+        pp_bs = float(e.precio_promo_divisa or 0)
+        if pp_usd <= 0 and pp_bs > 0:
+            pp_usd = round(pp_bs / float(t_ant), 2)
+        if pp_bs <= 0 and pp_usd > 0:
+            pp_bs = round(pp_usd * float(t_ant), 2)
 
         cu_usd = float(e.costo_unitario_usd or 0)
-        if cu_usd <= 0 and e.costo_unitario > 0:
-            cu_usd = round(float(e.costo_unitario) / float(t_ant), 2)
-        cu_bs = round(cu_usd * float(tasa_bcv), 2) if cu_usd > 0 else float(e.costo_unitario)
+        cu_bs = float(e.costo_unitario)
+        if cu_usd <= 0 and cu_bs > 0:
+            cu_usd = round(cu_bs / float(t_ant), 2)
+        if cu_bs <= 0 and cu_usd > 0:
+            cu_bs = round(cu_usd * float(t_ant), 2)
 
         data.append({
             'lote_id': e.id,
