@@ -95,6 +95,14 @@ def _serializar_entrada(e):
         'precio_gran_mayor': float(e.precio_gran_mayor or 0),
         'precio_promo_gran_mayor': float(e.precio_promo_gran_mayor or 0),
         'precio_promo_divisa': float(e.precio_promo_divisa or 0),
+        'costo_unitario_usd': float(e.costo_unitario_usd or 0),
+        'precio_venta_usd': float(e.precio_venta_usd or 0),
+        'precio_mayor_usd': float(e.precio_mayor_usd or 0),
+        'precio_promo_mayor_usd': float(e.precio_promo_mayor_usd or 0),
+        'precio_gran_mayor_usd': float(e.precio_gran_mayor_usd or 0),
+        'precio_promo_gran_mayor_usd': float(e.precio_promo_gran_mayor_usd or 0),
+        'precio_promo_divisa_usd': float(e.precio_promo_divisa_usd or 0),
+        'tasa_al_momento': float(e.tasa_al_momento or 1),
         'fecha': fecha_caracas.strftime("%d/%m/%Y"),
         'fecha_hora_12h': fecha_caracas.strftime("%d/%m/%Y %I:%M %p"),
         'observaciones': e.observaciones,
@@ -173,6 +181,31 @@ def _crear_entrada(request):
         producto.stock_minimo = minimo
         producto.save()
 
+        tasa_bcv = HistorialTasa.obtener_ultima_tasa('USD_BCV') or Decimal('897.54')
+        if tasa_bcv <= Decimal('0.00'):
+            tasa_bcv = Decimal('1.00')
+
+        def _val_usd(campo_usd, campo_bs):
+            raw = payload.get(campo_usd)
+            if raw is not None and str(raw).strip() != '':
+                try:
+                    v = Decimal(str(raw))
+                    if v >= Decimal('0.00'):
+                        return v
+                except:
+                    pass
+            if tasa_bcv > 0 and campo_bs > 0:
+                return (campo_bs / tasa_bcv).quantize(Decimal('0.01'))
+            return Decimal('0.00')
+
+        costo_usd = _val_usd('costo_unitario_usd', costo)
+        precio_usd = _val_usd('precio_venta_usd', precio)
+        precio_mayor_usd = _val_usd('precio_mayor_usd', precio_mayor)
+        precio_promo_mayor_usd = _val_usd('precio_promo_mayor_usd', precio_promo_mayor)
+        precio_gran_mayor_usd = _val_usd('precio_gran_mayor_usd', precio_gran_mayor)
+        precio_promo_gran_mayor_usd = _val_usd('precio_promo_gran_mayor_usd', precio_promo_gran_mayor)
+        precio_promo_usd = _val_usd('precio_promo_divisa_usd', precio_promo)
+
         entrada = EntradaMercancia.objects.create(
             producto=producto,
             cantidad_recibida=cantidad,
@@ -184,6 +217,14 @@ def _crear_entrada(request):
             precio_gran_mayor=precio_gran_mayor,
             precio_promo_gran_mayor=precio_promo_gran_mayor,
             precio_promo_divisa=precio_promo,
+            tasa_al_momento=tasa_bcv,
+            costo_unitario_usd=costo_usd,
+            precio_venta_usd=precio_usd,
+            precio_mayor_usd=precio_mayor_usd,
+            precio_promo_mayor_usd=precio_promo_mayor_usd,
+            precio_gran_mayor_usd=precio_gran_mayor_usd,
+            precio_promo_gran_mayor_usd=precio_promo_gran_mayor_usd,
+            precio_promo_divisa_usd=precio_promo_usd,
             observaciones=observaciones
         )
 
@@ -251,21 +292,70 @@ def api_lotes_disponibles(request):
         q_norm = normalizar_texto(q)
         entradas = entradas.filter(producto__nombre_busqueda__icontains=q_norm)
 
-    data = [{
-        'lote_id': e.id,
-        'producto_id': e.producto.id,
-        'producto_nombre': e.producto.nombre,
-        'cantidad_disponible': e.cantidad_disponible,
-        'precio_venta': float(e.precio_venta),
-        'precio_mayor': float(e.precio_mayor or 0),
-        'precio_promo_mayor': float(e.precio_promo_mayor or 0),
-        'precio_gran_mayor': float(e.precio_gran_mayor or 0),
-        'precio_promo_gran_mayor': float(e.precio_promo_gran_mayor or 0),
-        'precio_promo_divisa': float(e.precio_promo_divisa or 0),
-        'costo_unitario': float(e.costo_unitario),
-        'fecha': timezone.localtime(e.fecha_entrada, CARACAS_TZ).strftime("%d/%m/%Y"),
-        'fecha_hora_12h': timezone.localtime(e.fecha_entrada, CARACAS_TZ).strftime("%d/%m/%Y %I:%M %p"),
-    } for e in entradas]
+    tasa_bcv = HistorialTasa.obtener_ultima_tasa('USD_BCV') or Decimal('897.54')
+    if tasa_bcv <= Decimal('0.00'):
+        tasa_bcv = Decimal('1.00')
+
+    data = []
+    for e in entradas:
+        t_ant = e.tasa_al_momento if (e.tasa_al_momento and e.tasa_al_momento > Decimal('0.00')) else tasa_bcv
+        pv_usd = float(e.precio_venta_usd or 0)
+        if pv_usd <= 0 and e.precio_venta > 0:
+            pv_usd = round(float(e.precio_venta) / float(t_ant), 2)
+        pv_bs = round(pv_usd * float(tasa_bcv), 2) if pv_usd > 0 else float(e.precio_venta)
+
+        pm_usd = float(e.precio_mayor_usd or 0)
+        if pm_usd <= 0 and (e.precio_mayor or 0) > 0:
+            pm_usd = round(float(e.precio_mayor) / float(t_ant), 2)
+        pm_bs = round(pm_usd * float(tasa_bcv), 2) if pm_usd > 0 else float(e.precio_mayor or 0)
+
+        ppm_usd = float(e.precio_promo_mayor_usd or 0)
+        if ppm_usd <= 0 and (e.precio_promo_mayor or 0) > 0:
+            ppm_usd = round(float(e.precio_promo_mayor) / float(t_ant), 2)
+        ppm_bs = round(ppm_usd * float(tasa_bcv), 2) if ppm_usd > 0 else float(e.precio_promo_mayor or 0)
+
+        pgm_usd = float(e.precio_gran_mayor_usd or 0)
+        if pgm_usd <= 0 and (e.precio_gran_mayor or 0) > 0:
+            pgm_usd = round(float(e.precio_gran_mayor) / float(t_ant), 2)
+        pgm_bs = round(pgm_usd * float(tasa_bcv), 2) if pgm_usd > 0 else float(e.precio_gran_mayor or 0)
+
+        ppgm_usd = float(e.precio_promo_gran_mayor_usd or 0)
+        if ppgm_usd <= 0 and (e.precio_promo_gran_mayor or 0) > 0:
+            ppgm_usd = round(float(e.precio_promo_gran_mayor) / float(t_ant), 2)
+        ppgm_bs = round(ppgm_usd * float(tasa_bcv), 2) if ppgm_usd > 0 else float(e.precio_promo_gran_mayor or 0)
+
+        pp_usd = float(e.precio_promo_divisa_usd or 0)
+        if pp_usd <= 0 and (e.precio_promo_divisa or 0) > 0:
+            pp_usd = round(float(e.precio_promo_divisa) / float(t_ant), 2)
+        pp_bs = round(pp_usd * float(tasa_bcv), 2) if pp_usd > 0 else float(e.precio_promo_divisa or 0)
+
+        cu_usd = float(e.costo_unitario_usd or 0)
+        if cu_usd <= 0 and e.costo_unitario > 0:
+            cu_usd = round(float(e.costo_unitario) / float(t_ant), 2)
+        cu_bs = round(cu_usd * float(tasa_bcv), 2) if cu_usd > 0 else float(e.costo_unitario)
+
+        data.append({
+            'lote_id': e.id,
+            'producto_id': e.producto.id,
+            'producto_nombre': e.producto.nombre,
+            'cantidad_disponible': e.cantidad_disponible,
+            'precio_venta': pv_bs,
+            'precio_venta_usd': pv_usd,
+            'precio_mayor': pm_bs,
+            'precio_mayor_usd': pm_usd,
+            'precio_promo_mayor': ppm_bs,
+            'precio_promo_mayor_usd': ppm_usd,
+            'precio_gran_mayor': pgm_bs,
+            'precio_gran_mayor_usd': pgm_usd,
+            'precio_promo_gran_mayor': ppgm_bs,
+            'precio_promo_gran_mayor_usd': ppgm_usd,
+            'precio_promo_divisa': pp_bs,
+            'precio_promo_divisa_usd': pp_usd,
+            'costo_unitario': cu_bs,
+            'costo_unitario_usd': cu_usd,
+            'fecha': timezone.localtime(e.fecha_entrada, CARACAS_TZ).strftime("%d/%m/%Y"),
+            'fecha_hora_12h': timezone.localtime(e.fecha_entrada, CARACAS_TZ).strftime("%d/%m/%Y %I:%M %p"),
+        })
 
     return JsonResponse({'lotes': data})
 

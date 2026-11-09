@@ -56,6 +56,55 @@ class EntradaMercancia(models.Model):
         default=Decimal('0.00'),
         verbose_name="Precio promo divisa gran mayor unitario (Bs)"
     )
+    # Precios anclados en USD y tasa al momento de la entrada
+    tasa_al_momento = models.DecimalField(
+        max_digits=12,
+        decimal_places=4,
+        default=Decimal('1.0000'),
+        verbose_name="Tasa USD BCV al momento de entrada"
+    )
+    costo_unitario_usd = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        verbose_name="Costo de compra unitario (USD)"
+    )
+    precio_venta_usd = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        verbose_name="Precio de venta unitario (USD)"
+    )
+    precio_mayor_usd = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        verbose_name="Precio al mayor unitario (USD)"
+    )
+    precio_promo_mayor_usd = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        verbose_name="Precio promo mayor unitario (USD)"
+    )
+    precio_gran_mayor_usd = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        verbose_name="Precio al gran mayor unitario (USD)"
+    )
+    precio_promo_gran_mayor_usd = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        verbose_name="Precio promo gran mayor unitario (USD)"
+    )
+    precio_promo_divisa_usd = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        verbose_name="Precio promo divisa unitario (USD)"
+    )
     fecha_entrada = models.DateTimeField(
         default=timezone.now,
         db_index=True,

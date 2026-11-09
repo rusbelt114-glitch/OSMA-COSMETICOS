@@ -6,15 +6,23 @@ from .models import Producto, normalizar_texto
 
 from django.db.models import Sum, Subquery, OuterRef, Value, IntegerField, DecimalField, Q
 from django.db.models.functions import Coalesce
+from decimal import Decimal
 from inventario.models import EntradaMercancia
+from tasas.models import HistorialTasa
 
 def _listar_productos(request):
     """
     Consulta y serializa los productos optimizado en 1 SOLA CONSULTA SQL
     eliminando por completo el problema N+1.
+    Garantiza que los precios permanezcan anclados en USD y que su valor en Bs
+    escale automáticamente con la tasa oficial BCV actual para evitar pérdidas.
     """
     q = request.GET.get('q', '').strip()
     solo_activos = request.GET.get('activos', 'true').lower() in ('true', '1')
+
+    tasa_actual = HistorialTasa.obtener_ultima_tasa('USD_BCV') or Decimal('897.54')
+    if tasa_actual <= Decimal('0.00'):
+        tasa_actual = Decimal('1.00')
 
     ultimas_entradas = EntradaMercancia.objects.filter(producto=OuterRef('pk')).order_by('-fecha_entrada', '-id')
     sub_precio = Subquery(ultimas_entradas.values('precio_venta')[:1], output_field=DecimalField())
@@ -24,6 +32,15 @@ def _listar_productos(request):
     sub_precio_gran_mayor = Subquery(ultimas_entradas.values('precio_gran_mayor')[:1], output_field=DecimalField())
     sub_precio_promo_gran_mayor = Subquery(ultimas_entradas.values('precio_promo_gran_mayor')[:1], output_field=DecimalField())
     sub_precio_promo = Subquery(ultimas_entradas.values('precio_promo_divisa')[:1], output_field=DecimalField())
+
+    sub_precio_usd = Subquery(ultimas_entradas.values('precio_venta_usd')[:1], output_field=DecimalField())
+    sub_costo_usd = Subquery(ultimas_entradas.values('costo_unitario_usd')[:1], output_field=DecimalField())
+    sub_precio_mayor_usd = Subquery(ultimas_entradas.values('precio_mayor_usd')[:1], output_field=DecimalField())
+    sub_precio_promo_mayor_usd = Subquery(ultimas_entradas.values('precio_promo_mayor_usd')[:1], output_field=DecimalField())
+    sub_precio_gran_mayor_usd = Subquery(ultimas_entradas.values('precio_gran_mayor_usd')[:1], output_field=DecimalField())
+    sub_precio_promo_gran_mayor_usd = Subquery(ultimas_entradas.values('precio_promo_gran_mayor_usd')[:1], output_field=DecimalField())
+    sub_precio_promo_usd = Subquery(ultimas_entradas.values('precio_promo_divisa_usd')[:1], output_field=DecimalField())
+    sub_tasa_entrada = Subquery(ultimas_entradas.values('tasa_al_momento')[:1], output_field=DecimalField())
 
     productos_qs = Producto.objects.all()
     if solo_activos:
@@ -44,9 +61,18 @@ def _listar_productos(request):
         ult_precio_promo_mayor=sub_precio_promo_mayor,
         ult_precio_gran_mayor=sub_precio_gran_mayor,
         ult_precio_promo_gran_mayor=sub_precio_promo_gran_mayor,
-        ult_precio_promo=sub_precio_promo
+        ult_precio_promo=sub_precio_promo,
+        ult_precio_usd=sub_precio_usd,
+        ult_costo_usd=sub_costo_usd,
+        ult_precio_mayor_usd=sub_precio_mayor_usd,
+        ult_precio_promo_mayor_usd=sub_precio_promo_mayor_usd,
+        ult_precio_gran_mayor_usd=sub_precio_gran_mayor_usd,
+        ult_precio_promo_gran_mayor_usd=sub_precio_promo_gran_mayor_usd,
+        ult_precio_promo_usd=sub_precio_promo_usd,
+        ult_tasa=sub_tasa_entrada
     )
 
+    t_act_float = float(tasa_actual)
     data = []
     for p in productos:
         st = p.stock_disp or 0
@@ -57,6 +83,44 @@ def _listar_productos(request):
         else:
             estado = 'normal'
 
+        t_ant = float(p.ult_tasa or 0)
+        t_ref = t_ant if t_ant > 0 else t_act_float
+
+        pv_usd = float(p.ult_precio_usd or 0)
+        if pv_usd <= 0 and (p.ult_precio or 0) > 0:
+            pv_usd = round(float(p.ult_precio) / t_ref, 2)
+        pv_bs = round(pv_usd * t_act_float, 2) if pv_usd > 0 else float(p.ult_precio or 0)
+
+        cu_usd = float(p.ult_costo_usd or 0)
+        if cu_usd <= 0 and (p.ult_costo or 0) > 0:
+            cu_usd = round(float(p.ult_costo) / t_ref, 2)
+        cu_bs = round(cu_usd * t_act_float, 2) if cu_usd > 0 else float(p.ult_costo or 0)
+
+        pm_usd = float(p.ult_precio_mayor_usd or 0)
+        if pm_usd <= 0 and (p.ult_precio_mayor or 0) > 0:
+            pm_usd = round(float(p.ult_precio_mayor) / t_ref, 2)
+        pm_bs = round(pm_usd * t_act_float, 2) if pm_usd > 0 else float(p.ult_precio_mayor or 0)
+
+        ppm_usd = float(p.ult_precio_promo_mayor_usd or 0)
+        if ppm_usd <= 0 and (p.ult_precio_promo_mayor or 0) > 0:
+            ppm_usd = round(float(p.ult_precio_promo_mayor) / t_ref, 2)
+        ppm_bs = round(ppm_usd * t_act_float, 2) if ppm_usd > 0 else float(p.ult_precio_promo_mayor or 0)
+
+        pgm_usd = float(p.ult_precio_gran_mayor_usd or 0)
+        if pgm_usd <= 0 and (p.ult_precio_gran_mayor or 0) > 0:
+            pgm_usd = round(float(p.ult_precio_gran_mayor) / t_ref, 2)
+        pgm_bs = round(pgm_usd * t_act_float, 2) if pgm_usd > 0 else float(p.ult_precio_gran_mayor or 0)
+
+        ppgm_usd = float(p.ult_precio_promo_gran_mayor_usd or 0)
+        if ppgm_usd <= 0 and (p.ult_precio_promo_gran_mayor or 0) > 0:
+            ppgm_usd = round(float(p.ult_precio_promo_gran_mayor) / t_ref, 2)
+        ppgm_bs = round(ppgm_usd * t_act_float, 2) if ppgm_usd > 0 else float(p.ult_precio_promo_gran_mayor or 0)
+
+        pp_usd = float(p.ult_precio_promo_usd or 0)
+        if pp_usd <= 0 and (p.ult_precio_promo or 0) > 0:
+            pp_usd = round(float(p.ult_precio_promo) / t_ref, 2)
+        pp_bs = round(pp_usd * t_act_float, 2) if pp_usd > 0 else float(p.ult_precio_promo or 0)
+
         data.append({
             'id': p.id,
             'nombre': p.nombre,
@@ -64,13 +128,20 @@ def _listar_productos(request):
             'stock_total': st,
             'estado': estado,
             'activo': p.activo,
-            'ultimo_precio': float(p.ult_precio or 0),
-            'ultimo_costo': float(p.ult_costo or 0),
-            'ultimo_precio_mayor': float(p.ult_precio_mayor or 0),
-            'ultimo_precio_promo_mayor': float(p.ult_precio_promo_mayor or 0),
-            'ultimo_precio_gran_mayor': float(p.ult_precio_gran_mayor or 0),
-            'ultimo_precio_promo_gran_mayor': float(p.ult_precio_promo_gran_mayor or 0),
-            'ultimo_precio_promo': float(p.ult_precio_promo or 0),
+            'ultimo_precio': pv_bs,
+            'ultimo_precio_usd': pv_usd,
+            'ultimo_costo': cu_bs,
+            'ultimo_costo_usd': cu_usd,
+            'ultimo_precio_mayor': pm_bs,
+            'ultimo_precio_mayor_usd': pm_usd,
+            'ultimo_precio_promo_mayor': ppm_bs,
+            'ultimo_precio_promo_mayor_usd': ppm_usd,
+            'ultimo_precio_gran_mayor': pgm_bs,
+            'ultimo_precio_gran_mayor_usd': pgm_usd,
+            'ultimo_precio_promo_gran_mayor': ppgm_bs,
+            'ultimo_precio_promo_gran_mayor_usd': ppgm_usd,
+            'ultimo_precio_promo': pp_bs,
+            'ultimo_precio_promo_usd': pp_usd,
         })
 
     return JsonResponse({'productos': data})

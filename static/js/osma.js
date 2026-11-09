@@ -374,34 +374,21 @@
         $('name').readOnly = false; // Permitir editar o corregir libremente
         $('minimum').value = p.stock_minimo;
         const rate = getBcvRate();
-        if (p.ultimo_costo > 0) {
-            $('cost').value = fmt(p.ultimo_costo);
-            if ($('cost-usd') && rate > 0) $('cost-usd').value = fmt(p.ultimo_costo / rate);
-        }
-        if (p.ultimo_precio > 0) {
-            $('price').value = fmt(p.ultimo_precio);
-            if ($('price-usd') && rate > 0) $('price-usd').value = fmt(p.ultimo_precio / rate);
-        }
-        if (p.ultimo_precio_mayor > 0) {
-            if ($('price-mayor')) $('price-mayor').value = fmt(p.ultimo_precio_mayor);
-            if ($('price-mayor-usd') && rate > 0) $('price-mayor-usd').value = fmt(p.ultimo_precio_mayor / rate);
-        }
-        if (p.ultimo_precio_promo_mayor > 0) {
-            if ($('price-promo-mayor')) $('price-promo-mayor').value = fmt(p.ultimo_precio_promo_mayor);
-            if ($('price-promo-mayor-usd') && rate > 0) $('price-promo-mayor-usd').value = fmt(p.ultimo_precio_promo_mayor / rate);
-        }
-        if (p.ultimo_precio_gran_mayor > 0) {
-            if ($('price-gran-mayor')) $('price-gran-mayor').value = fmt(p.ultimo_precio_gran_mayor);
-            if ($('price-gran-mayor-usd') && rate > 0) $('price-gran-mayor-usd').value = fmt(p.ultimo_precio_gran_mayor / rate);
-        }
-        if (p.ultimo_precio_promo_gran_mayor > 0) {
-            if ($('price-promo-gran-mayor')) $('price-promo-gran-mayor').value = fmt(p.ultimo_precio_promo_gran_mayor);
-            if ($('price-promo-gran-mayor-usd') && rate > 0) $('price-promo-gran-mayor-usd').value = fmt(p.ultimo_precio_promo_gran_mayor / rate);
-        }
-        if (p.ultimo_precio_promo > 0) {
-            if ($('price-promo')) $('price-promo').value = fmt(p.ultimo_precio_promo);
-            if ($('price-promo-usd') && rate > 0) $('price-promo-usd').value = fmt(p.ultimo_precio_promo / rate);
-        }
+
+        const setFieldVal = (idUsd, idBs, valUsd, valBs) => {
+            const u = valUsd > 0 ? valUsd : (rate > 0 && valBs > 0 ? valBs / rate : 0);
+            const b = u > 0 && rate > 0 ? u * rate : valBs;
+            if ($(idUsd) && u > 0) $(idUsd).value = fmt(u);
+            if ($(idBs) && b > 0) $(idBs).value = fmt(b);
+        };
+
+        setFieldVal('cost-usd', 'cost', p.ultimo_costo_usd, p.ultimo_costo);
+        setFieldVal('price-usd', 'price', p.ultimo_precio_usd, p.ultimo_precio);
+        setFieldVal('price-mayor-usd', 'price-mayor', p.ultimo_precio_mayor_usd, p.ultimo_precio_mayor);
+        setFieldVal('price-promo-mayor-usd', 'price-promo-mayor', p.ultimo_precio_promo_mayor_usd, p.ultimo_precio_promo_mayor);
+        setFieldVal('price-gran-mayor-usd', 'price-gran-mayor', p.ultimo_precio_gran_mayor_usd, p.ultimo_precio_gran_mayor);
+        setFieldVal('price-promo-gran-mayor-usd', 'price-promo-gran-mayor', p.ultimo_precio_promo_gran_mayor_usd, p.ultimo_precio_promo_gran_mayor);
+        setFieldVal('price-promo-usd', 'price-promo', p.ultimo_precio_promo_usd, p.ultimo_precio_promo);
         $('clear-selection').hidden = false;
         $('suggest').innerHTML = '';
         info(`Producto "${p.nombre}" seleccionado. Ingresa la nueva cantidad recibida.`);
@@ -498,6 +485,14 @@
         const precio_promo_gran_mayor = $('price-promo-gran-mayor') ? parseMoney($('price-promo-gran-mayor').value) : 0;
         const precio_promo_divisa = $('price-promo') ? parseMoney($('price-promo').value) : 0;
 
+        const costo_unitario_usd = $('cost-usd') ? parseMoney($('cost-usd').value) : 0;
+        const precio_venta_usd = $('price-usd') ? parseMoney($('price-usd').value) : 0;
+        const precio_mayor_usd = $('price-mayor-usd') ? parseMoney($('price-mayor-usd').value) : 0;
+        const precio_promo_mayor_usd = $('price-promo-mayor-usd') ? parseMoney($('price-promo-mayor-usd').value) : 0;
+        const precio_gran_mayor_usd = $('price-gran-mayor-usd') ? parseMoney($('price-gran-mayor-usd').value) : 0;
+        const precio_promo_gran_mayor_usd = $('price-promo-gran-mayor-usd') ? parseMoney($('price-promo-gran-mayor-usd').value) : 0;
+        const precio_promo_divisa_usd = $('price-promo-usd') ? parseMoney($('price-promo-usd').value) : 0;
+
         if (!nombre) {
             info('Por favor indica el nombre del producto.', true);
             $('name').focus();
@@ -537,6 +532,13 @@
                     precio_gran_mayor: precio_gran_mayor,
                     precio_promo_gran_mayor: precio_promo_gran_mayor,
                     precio_promo_divisa: precio_promo_divisa,
+                    costo_unitario_usd: costo_unitario_usd,
+                    precio_venta_usd: precio_venta_usd,
+                    precio_mayor_usd: precio_mayor_usd,
+                    precio_promo_mayor_usd: precio_promo_mayor_usd,
+                    precio_gran_mayor_usd: precio_gran_mayor_usd,
+                    precio_promo_gran_mayor_usd: precio_promo_gran_mayor_usd,
+                    precio_promo_divisa_usd: precio_promo_divisa_usd,
                     confirmar_coincidencia: window._confirmarCoincidenciaEntrada || false
                 })
             });
@@ -672,7 +674,35 @@
 
     let currentSaleMode = 'detal';
 
+    function getPriceUsdForProduct(p) {
+        const isPromo = $('chk-promo-divisa') && $('chk-promo-divisa').checked;
+        const rate = getBcvRate() || 1;
+        if (currentSaleMode === 'mayor') {
+            if (isPromo && p.ultimo_precio_promo_mayor_usd > 0) return p.ultimo_precio_promo_mayor_usd;
+            if (isPromo && p.ultimo_precio_promo_mayor > 0) return p.ultimo_precio_promo_mayor / rate;
+            if (p.ultimo_precio_mayor_usd > 0) return p.ultimo_precio_mayor_usd;
+            if (p.ultimo_precio_mayor > 0) return p.ultimo_precio_mayor / rate;
+            return p.ultimo_precio_usd || (p.ultimo_precio / rate);
+        }
+        if (currentSaleMode === 'gran_mayor') {
+            if (isPromo && p.ultimo_precio_promo_gran_mayor_usd > 0) return p.ultimo_precio_promo_gran_mayor_usd;
+            if (isPromo && p.ultimo_precio_promo_gran_mayor > 0) return p.ultimo_precio_promo_gran_mayor / rate;
+            if (p.ultimo_precio_gran_mayor_usd > 0) return p.ultimo_precio_gran_mayor_usd;
+            if (p.ultimo_precio_gran_mayor > 0) return p.ultimo_precio_gran_mayor / rate;
+            return p.ultimo_precio_usd || (p.ultimo_precio / rate);
+        }
+        // Modo Detal por defecto
+        if (isPromo && p.ultimo_precio_promo_usd > 0) return p.ultimo_precio_promo_usd;
+        if (isPromo && p.ultimo_precio_promo > 0) return p.ultimo_precio_promo / rate;
+        return p.ultimo_precio_usd || (p.ultimo_precio / rate);
+    }
+
     function getPriceForProduct(p) {
+        const rate = getBcvRate();
+        const pUsd = getPriceUsdForProduct(p);
+        if (pUsd > 0 && rate > 0) {
+            return Math.round(pUsd * rate * 100) / 100;
+        }
         const isPromo = $('chk-promo-divisa') && $('chk-promo-divisa').checked;
         if (currentSaleMode === 'mayor') {
             if (isPromo && p.ultimo_precio_promo_mayor > 0) return p.ultimo_precio_promo_mayor;
@@ -733,19 +763,19 @@
 
         const rBcv = getBcvRate();
         select.innerHTML = availableProds.map(p => {
-            const precioBs = getPriceForProduct(p);
-            const precioUsd = rBcv > 0 ? (precioBs / rBcv) : 0;
+            const precioUsd = getPriceUsdForProduct(p);
+            const precioBs = rBcv > 0 && precioUsd > 0 ? Math.round(precioUsd * rBcv * 100) / 100 : getPriceForProduct(p);
             let tag = '';
             const isPromo = $('chk-promo-divisa') && $('chk-promo-divisa').checked;
             if (currentSaleMode === 'mayor') {
-                tag = isPromo && p.ultimo_precio_promo_mayor > 0 ? ' · [Promo Mayor]' : ' · [Mayor]';
+                tag = isPromo && (p.ultimo_precio_promo_mayor_usd > 0 || p.ultimo_precio_promo_mayor > 0) ? ' · [Promo Mayor]' : ' · [Mayor]';
             } else if (currentSaleMode === 'gran_mayor') {
-                tag = isPromo && p.ultimo_precio_promo_gran_mayor > 0 ? ' · [Promo Gran Mayor]' : ' · [Gran Mayor]';
-            } else if (isPromo && p.ultimo_precio_promo > 0) {
+                tag = isPromo && (p.ultimo_precio_promo_gran_mayor_usd > 0 || p.ultimo_precio_promo_gran_mayor > 0) ? ' · [Promo Gran Mayor]' : ' · [Gran Mayor]';
+            } else if (isPromo && (p.ultimo_precio_promo_usd > 0 || p.ultimo_precio_promo > 0)) {
                 tag = ' · [Promo Detal]';
             }
 
-            return `<option value="${p.id}" data-price="${precioBs}" data-prod="${p.id}" data-max="${p.stock_total}">
+            return `<option value="${p.id}" data-price="${precioBs}" data-usd="${precioUsd}" data-prod="${p.id}" data-max="${p.stock_total}">
                 ${esc(p.nombre)} · ${p.stock_total} disp. en total - Bs ${fmt(precioBs)} (≈ USD $ ${fmt(precioUsd)})${tag}
             </option>`;
         }).join('');
@@ -753,8 +783,9 @@
         const selectedOpt = select.options[select.selectedIndex];
         if (selectedOpt && selectedOpt.dataset.price) {
             const pBs = Number(selectedOpt.dataset.price);
+            const pUsd = Number(selectedOpt.dataset.usd || 0);
             $('sell-unit-price').value = fmt(pBs);
-            if ($('sell-unit-price-usd')) $('sell-unit-price-usd').value = rBcv > 0 ? fmt(pBs / rBcv) : '';
+            if ($('sell-unit-price-usd')) $('sell-unit-price-usd').value = pUsd > 0 ? fmt(pUsd) : (rBcv > 0 ? fmt(pBs / rBcv) : '');
         }
     }
 
@@ -763,9 +794,10 @@
         const opt = $('sell-product-select').options[$('sell-product-select').selectedIndex];
         if (opt && opt.dataset.price) {
             const pBs = Number(opt.dataset.price);
+            const pUsd = Number(opt.dataset.usd || 0);
             const rBcv = getBcvRate();
             $('sell-unit-price').value = fmt(pBs);
-            if ($('sell-unit-price-usd')) $('sell-unit-price-usd').value = rBcv > 0 ? fmt(pBs / rBcv) : '';
+            if ($('sell-unit-price-usd')) $('sell-unit-price-usd').value = pUsd > 0 ? fmt(pUsd) : (rBcv > 0 ? fmt(pBs / rBcv) : '');
         }
     };
 
@@ -1165,26 +1197,30 @@
 
             let precioInfoHtml = '';
             if (stockPriceView === 'detal') {
-                const usd = bcvRate > 0 ? (p.ultimo_precio / bcvRate) : 0;
-                const promoHtml = p.ultimo_precio_promo > 0 ? ` · <span style="color: #2b5c4f; font-weight: 600;">Promo Cash: $${fmt(p.ultimo_precio_promo / bcvRate)}</span>` : '';
-                precioInfoHtml = `Precio Detal: <b>Bs ${fmt(p.ultimo_precio)}</b> <span style="color: #2b5c4f; font-weight: 600;">(≈ USD $ ${fmt(usd)})</span>${promoHtml}`;
+                const usd = p.ultimo_precio_usd > 0 ? p.ultimo_precio_usd : (bcvRate > 0 ? (p.ultimo_precio / bcvRate) : 0);
+                const bs = usd > 0 && bcvRate > 0 ? (usd * bcvRate) : p.ultimo_precio;
+                const pCashUsd = p.ultimo_precio_promo_usd > 0 ? p.ultimo_precio_promo_usd : (bcvRate > 0 && p.ultimo_precio_promo > 0 ? (p.ultimo_precio_promo / bcvRate) : 0);
+                const promoHtml = pCashUsd > 0 ? ` · <span style="color: #2b5c4f; font-weight: 600;">Promo Cash: $${fmt(pCashUsd)}</span>` : '';
+                precioInfoHtml = `Precio Detal: <b>Bs ${fmt(bs)}</b> <span style="color: #2b5c4f; font-weight: 600;">(≈ USD $ ${fmt(usd)})</span>${promoHtml}`;
             } else if (stockPriceView === 'mayor') {
-                const pm = p.ultimo_precio_mayor > 0 ? p.ultimo_precio_mayor : p.ultimo_precio;
-                const usd = bcvRate > 0 ? (pm / bcvRate) : 0;
-                const promoHtml = p.ultimo_precio_promo_mayor > 0 ? ` · <span style="color: #2b5c4f; font-weight: 600;">Promo Cash: $${fmt(p.ultimo_precio_promo_mayor / bcvRate)}</span>` : '';
-                precioInfoHtml = `Precio Mayor: <b>Bs ${fmt(pm)}</b> <span style="color: #2b5c4f; font-weight: 600;">(≈ USD $ ${fmt(usd)})</span>${promoHtml}`;
+                const usd = p.ultimo_precio_mayor_usd > 0 ? p.ultimo_precio_mayor_usd : (p.ultimo_precio_usd > 0 ? p.ultimo_precio_usd : (bcvRate > 0 ? (p.ultimo_precio_mayor || p.ultimo_precio) / bcvRate : 0));
+                const bs = usd > 0 && bcvRate > 0 ? (usd * bcvRate) : (p.ultimo_precio_mayor > 0 ? p.ultimo_precio_mayor : p.ultimo_precio);
+                const pCashUsd = p.ultimo_precio_promo_mayor_usd > 0 ? p.ultimo_precio_promo_mayor_usd : (bcvRate > 0 && p.ultimo_precio_promo_mayor > 0 ? (p.ultimo_precio_promo_mayor / bcvRate) : 0);
+                const promoHtml = pCashUsd > 0 ? ` · <span style="color: #2b5c4f; font-weight: 600;">Promo Cash: $${fmt(pCashUsd)}</span>` : '';
+                precioInfoHtml = `Precio Mayor: <b>Bs ${fmt(bs)}</b> <span style="color: #2b5c4f; font-weight: 600;">(≈ USD $ ${fmt(usd)})</span>${promoHtml}`;
             } else if (stockPriceView === 'gran_mayor') {
-                const pgm = p.ultimo_precio_gran_mayor > 0 ? p.ultimo_precio_gran_mayor : p.ultimo_precio;
-                const usd = bcvRate > 0 ? (pgm / bcvRate) : 0;
-                const promoHtml = p.ultimo_precio_promo_gran_mayor > 0 ? ` · <span style="color: #2b5c4f; font-weight: 600;">Promo Cash: $${fmt(p.ultimo_precio_promo_gran_mayor / bcvRate)}</span>` : '';
-                precioInfoHtml = `Precio Gran Mayor: <b>Bs ${fmt(pgm)}</b> <span style="color: #2b5c4f; font-weight: 600;">(≈ USD $ ${fmt(usd)})</span>${promoHtml}`;
+                const usd = p.ultimo_precio_gran_mayor_usd > 0 ? p.ultimo_precio_gran_mayor_usd : (p.ultimo_precio_usd > 0 ? p.ultimo_precio_usd : (bcvRate > 0 ? (p.ultimo_precio_gran_mayor || p.ultimo_precio) / bcvRate : 0));
+                const bs = usd > 0 && bcvRate > 0 ? (usd * bcvRate) : (p.ultimo_precio_gran_mayor > 0 ? p.ultimo_precio_gran_mayor : p.ultimo_precio);
+                const pCashUsd = p.ultimo_precio_promo_gran_mayor_usd > 0 ? p.ultimo_precio_promo_gran_mayor_usd : (bcvRate > 0 && p.ultimo_precio_promo_gran_mayor > 0 ? (p.ultimo_precio_promo_gran_mayor / bcvRate) : 0);
+                const promoHtml = pCashUsd > 0 ? ` · <span style="color: #2b5c4f; font-weight: 600;">Promo Cash: $${fmt(pCashUsd)}</span>` : '';
+                precioInfoHtml = `Precio Gran Mayor: <b>Bs ${fmt(bs)}</b> <span style="color: #2b5c4f; font-weight: 600;">(≈ USD $ ${fmt(usd)})</span>${promoHtml}`;
             } else {
-                const uDetal = bcvRate > 0 ? fmt(p.ultimo_precio / bcvRate) : '0,00';
-                const uMayor = p.ultimo_precio_mayor > 0 ? fmt(p.ultimo_precio_mayor / bcvRate) : '-';
-                const uGranMayor = p.ultimo_precio_gran_mayor > 0 ? fmt(p.ultimo_precio_gran_mayor / bcvRate) : '-';
-                const uPromoDetal = p.ultimo_precio_promo > 0 ? fmt(p.ultimo_precio_promo / bcvRate) : '-';
-                const uPromoMayor = p.ultimo_precio_promo_mayor > 0 ? fmt(p.ultimo_precio_promo_mayor / bcvRate) : '-';
-                const uPromoGranMayor = p.ultimo_precio_promo_gran_mayor > 0 ? fmt(p.ultimo_precio_promo_gran_mayor / bcvRate) : '-';
+                const uDetal = p.ultimo_precio_usd > 0 ? fmt(p.ultimo_precio_usd) : (bcvRate > 0 ? fmt(p.ultimo_precio / bcvRate) : '0,00');
+                const uMayor = p.ultimo_precio_mayor_usd > 0 ? fmt(p.ultimo_precio_mayor_usd) : (p.ultimo_precio_mayor > 0 && bcvRate > 0 ? fmt(p.ultimo_precio_mayor / bcvRate) : '-');
+                const uGranMayor = p.ultimo_precio_gran_mayor_usd > 0 ? fmt(p.ultimo_precio_gran_mayor_usd) : (p.ultimo_precio_gran_mayor > 0 && bcvRate > 0 ? fmt(p.ultimo_precio_gran_mayor / bcvRate) : '-');
+                const uPromoDetal = p.ultimo_precio_promo_usd > 0 ? fmt(p.ultimo_precio_promo_usd) : (p.ultimo_precio_promo > 0 && bcvRate > 0 ? fmt(p.ultimo_precio_promo / bcvRate) : '-');
+                const uPromoMayor = p.ultimo_precio_promo_mayor_usd > 0 ? fmt(p.ultimo_precio_promo_mayor_usd) : (p.ultimo_precio_promo_mayor > 0 && bcvRate > 0 ? fmt(p.ultimo_precio_promo_mayor / bcvRate) : '-');
+                const uPromoGranMayor = p.ultimo_precio_promo_gran_mayor_usd > 0 ? fmt(p.ultimo_precio_promo_gran_mayor_usd) : (p.ultimo_precio_promo_gran_mayor > 0 && bcvRate > 0 ? fmt(p.ultimo_precio_promo_gran_mayor / bcvRate) : '-');
 
                 precioInfoHtml = `
                     <div style="font-size: 0.8rem; display: flex; gap: 8px; flex-wrap: wrap; margin-top: 3px;">
