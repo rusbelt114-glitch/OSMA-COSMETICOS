@@ -296,57 +296,56 @@ def api_lotes_disponibles(request):
     if tasa_bcv <= Decimal('0.00'):
         tasa_bcv = Decimal('1.00')
 
+    t_hoy = float(tasa_bcv)  # tasa de hoy — referencia dinámica para convertir USD → Bs en vitrina
+
     data = []
     for e in entradas:
-        t_ant = e.tasa_al_momento if (e.tasa_al_momento and e.tasa_al_momento > Decimal('0.00')) else tasa_bcv
+        # Para recuperar el USD de productos viejos sin campo USD, usamos la tasa histórica del lote.
+        t_ant = float(e.tasa_al_momento) if (e.tasa_al_momento and e.tasa_al_momento > Decimal('0.00')) else t_hoy
+
+        # USD = ancla permanente (precio real, no cambia).
+        # Bs vitrina = precio_usd × tasa_de_hoy (dinámico — sube con el dólar).
         pv_usd = float(e.precio_venta_usd or 0)
-        pv_bs = float(e.precio_venta)
-        if pv_usd <= 0 and pv_bs > 0:
-            pv_usd = round(pv_bs / float(t_ant), 2)
-        if pv_bs <= 0 and pv_usd > 0:
-            pv_bs = round(pv_usd * float(t_ant), 2)
+        pv_bs_hist = float(e.precio_venta)
+        if pv_usd <= 0 and pv_bs_hist > 0:
+            pv_usd = round(pv_bs_hist / t_ant, 2)
+        pv_bs = round(pv_usd * t_hoy, 2) if pv_usd > 0 else pv_bs_hist
 
         pm_usd = float(e.precio_mayor_usd or 0)
-        pm_bs = float(e.precio_mayor or 0)
-        if pm_usd <= 0 and pm_bs > 0:
-            pm_usd = round(pm_bs / float(t_ant), 2)
-        if pm_bs <= 0 and pm_usd > 0:
-            pm_bs = round(pm_usd * float(t_ant), 2)
+        pm_bs_hist = float(e.precio_mayor or 0)
+        if pm_usd <= 0 and pm_bs_hist > 0:
+            pm_usd = round(pm_bs_hist / t_ant, 2)
+        pm_bs = round(pm_usd * t_hoy, 2) if pm_usd > 0 else pm_bs_hist
 
         ppm_usd = float(e.precio_promo_mayor_usd or 0)
-        ppm_bs = float(e.precio_promo_mayor or 0)
-        if ppm_usd <= 0 and ppm_bs > 0:
-            ppm_usd = round(ppm_bs / float(t_ant), 2)
-        if ppm_bs <= 0 and ppm_usd > 0:
-            ppm_bs = round(ppm_usd * float(t_ant), 2)
+        ppm_bs_hist = float(e.precio_promo_mayor or 0)
+        if ppm_usd <= 0 and ppm_bs_hist > 0:
+            ppm_usd = round(ppm_bs_hist / t_ant, 2)
+        ppm_bs = round(ppm_usd * t_hoy, 2) if ppm_usd > 0 else ppm_bs_hist
 
         pgm_usd = float(e.precio_gran_mayor_usd or 0)
-        pgm_bs = float(e.precio_gran_mayor or 0)
-        if pgm_usd <= 0 and pgm_bs > 0:
-            pgm_usd = round(pgm_bs / float(t_ant), 2)
-        if pgm_bs <= 0 and pgm_usd > 0:
-            pgm_bs = round(pgm_usd * float(t_ant), 2)
+        pgm_bs_hist = float(e.precio_gran_mayor or 0)
+        if pgm_usd <= 0 and pgm_bs_hist > 0:
+            pgm_usd = round(pgm_bs_hist / t_ant, 2)
+        pgm_bs = round(pgm_usd * t_hoy, 2) if pgm_usd > 0 else pgm_bs_hist
 
         ppgm_usd = float(e.precio_promo_gran_mayor_usd or 0)
-        ppgm_bs = float(e.precio_promo_gran_mayor or 0)
-        if ppgm_usd <= 0 and ppgm_bs > 0:
-            ppgm_usd = round(ppgm_bs / float(t_ant), 2)
-        if ppgm_bs <= 0 and ppgm_usd > 0:
-            ppgm_bs = round(ppgm_usd * float(t_ant), 2)
+        ppgm_bs_hist = float(e.precio_promo_gran_mayor or 0)
+        if ppgm_usd <= 0 and ppgm_bs_hist > 0:
+            ppgm_usd = round(ppgm_bs_hist / t_ant, 2)
+        ppgm_bs = round(ppgm_usd * t_hoy, 2) if ppgm_usd > 0 else ppgm_bs_hist
 
         pp_usd = float(e.precio_promo_divisa_usd or 0)
-        pp_bs = float(e.precio_promo_divisa or 0)
-        if pp_usd <= 0 and pp_bs > 0:
-            pp_usd = round(pp_bs / float(t_ant), 2)
-        if pp_bs <= 0 and pp_usd > 0:
-            pp_bs = round(pp_usd * float(t_ant), 2)
+        pp_bs_hist = float(e.precio_promo_divisa or 0)
+        if pp_usd <= 0 and pp_bs_hist > 0:
+            pp_usd = round(pp_bs_hist / t_ant, 2)
+        pp_bs = round(pp_usd * t_hoy, 2) if pp_usd > 0 else pp_bs_hist
 
         cu_usd = float(e.costo_unitario_usd or 0)
-        cu_bs = float(e.costo_unitario)
-        if cu_usd <= 0 and cu_bs > 0:
-            cu_usd = round(cu_bs / float(t_ant), 2)
-        if cu_bs <= 0 and cu_usd > 0:
-            cu_bs = round(cu_usd * float(t_ant), 2)
+        cu_bs_hist = float(e.costo_unitario)
+        if cu_usd <= 0 and cu_bs_hist > 0:
+            cu_usd = round(cu_bs_hist / t_ant, 2)
+        cu_bs = round(cu_usd * t_hoy, 2) if cu_usd > 0 else cu_bs_hist
 
         data.append({
             'lote_id': e.id,
