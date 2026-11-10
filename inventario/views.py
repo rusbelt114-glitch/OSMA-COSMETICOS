@@ -301,51 +301,27 @@ def api_lotes_disponibles(request):
     data = []
     for e in entradas:
         # Para recuperar el USD de productos viejos sin campo USD, usamos la tasa histórica del lote.
-        t_ant = float(e.tasa_al_momento) if (e.tasa_al_momento and e.tasa_al_momento > Decimal('0.00')) else t_hoy
+        t_ant = float(e.tasa_al_momento) if (e.tasa_al_momento and e.tasa_al_momento > Decimal('10.00')) else t_hoy
 
         # USD = ancla permanente (precio real, no cambia).
         # Bs vitrina = precio_usd × tasa_de_hoy (dinámico — sube con el dólar).
-        pv_usd = float(e.precio_venta_usd or 0)
-        pv_bs_hist = float(e.precio_venta)
-        if pv_usd <= 0 and pv_bs_hist > 0:
-            pv_usd = round(pv_bs_hist / t_ant, 2)
-        pv_bs = round(pv_usd * t_hoy, 2) if pv_usd > 0 else pv_bs_hist
+        def _resolver_lote(val_usd, val_bs):
+            u = float(val_usd or 0)
+            b = float(val_bs or 0)
+            if u > 100.0 and b > 0 and abs(u - b) < 0.1:
+                u = round(b / t_ant, 2)
+            elif u <= 0 and b > 0:
+                u = round(b / t_ant, 2)
+            b_dinamico = round(u * t_hoy, 2) if u > 0 else b
+            return u, b_dinamico
 
-        pm_usd = float(e.precio_mayor_usd or 0)
-        pm_bs_hist = float(e.precio_mayor or 0)
-        if pm_usd <= 0 and pm_bs_hist > 0:
-            pm_usd = round(pm_bs_hist / t_ant, 2)
-        pm_bs = round(pm_usd * t_hoy, 2) if pm_usd > 0 else pm_bs_hist
-
-        ppm_usd = float(e.precio_promo_mayor_usd or 0)
-        ppm_bs_hist = float(e.precio_promo_mayor or 0)
-        if ppm_usd <= 0 and ppm_bs_hist > 0:
-            ppm_usd = round(ppm_bs_hist / t_ant, 2)
-        ppm_bs = round(ppm_usd * t_hoy, 2) if ppm_usd > 0 else ppm_bs_hist
-
-        pgm_usd = float(e.precio_gran_mayor_usd or 0)
-        pgm_bs_hist = float(e.precio_gran_mayor or 0)
-        if pgm_usd <= 0 and pgm_bs_hist > 0:
-            pgm_usd = round(pgm_bs_hist / t_ant, 2)
-        pgm_bs = round(pgm_usd * t_hoy, 2) if pgm_usd > 0 else pgm_bs_hist
-
-        ppgm_usd = float(e.precio_promo_gran_mayor_usd or 0)
-        ppgm_bs_hist = float(e.precio_promo_gran_mayor or 0)
-        if ppgm_usd <= 0 and ppgm_bs_hist > 0:
-            ppgm_usd = round(ppgm_bs_hist / t_ant, 2)
-        ppgm_bs = round(ppgm_usd * t_hoy, 2) if ppgm_usd > 0 else ppgm_bs_hist
-
-        pp_usd = float(e.precio_promo_divisa_usd or 0)
-        pp_bs_hist = float(e.precio_promo_divisa or 0)
-        if pp_usd <= 0 and pp_bs_hist > 0:
-            pp_usd = round(pp_bs_hist / t_ant, 2)
-        pp_bs = round(pp_usd * t_hoy, 2) if pp_usd > 0 else pp_bs_hist
-
-        cu_usd = float(e.costo_unitario_usd or 0)
-        cu_bs_hist = float(e.costo_unitario)
-        if cu_usd <= 0 and cu_bs_hist > 0:
-            cu_usd = round(cu_bs_hist / t_ant, 2)
-        cu_bs = round(cu_usd * t_hoy, 2) if cu_usd > 0 else cu_bs_hist
+        pv_usd, pv_bs = _resolver_lote(e.precio_venta_usd, e.precio_venta)
+        pm_usd, pm_bs = _resolver_lote(e.precio_mayor_usd, e.precio_mayor)
+        ppm_usd, ppm_bs = _resolver_lote(e.precio_promo_mayor_usd, e.precio_promo_mayor)
+        pgm_usd, pgm_bs = _resolver_lote(e.precio_gran_mayor_usd, e.precio_gran_mayor)
+        ppgm_usd, ppgm_bs = _resolver_lote(e.precio_promo_gran_mayor_usd, e.precio_promo_gran_mayor)
+        pp_usd, pp_bs = _resolver_lote(e.precio_promo_divisa_usd, e.precio_promo_divisa)
+        cu_usd, cu_bs = _resolver_lote(e.costo_unitario_usd, e.costo_unitario)
 
         data.append({
             'lote_id': e.id,

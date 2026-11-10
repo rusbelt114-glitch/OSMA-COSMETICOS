@@ -84,52 +84,29 @@ def _listar_productos(request):
             estado = 'normal'
 
         t_ant = float(p.ult_tasa or 0)
+        t_safe = t_ant if t_ant > 10.0 else t_act_float
 
         # USD es el ancla permanente (precio real, nunca cambia solo).
         # Los Bs en vitrina = precio_usd × tasa_BCV_del_dia (dinámico).
-        # Si mañana la tasa sube de 800 a 1000, el producto de 5$ pasa de
-        # mostrar 4.000 Bs a 5.000 Bs automáticamente. Así se protege la tienda.
-        pv_usd = float(p.ult_precio_usd or 0)
-        pv_bs_hist = float(p.ult_precio or 0)
-        if pv_usd <= 0 and pv_bs_hist > 0:
-            pv_usd = round(pv_bs_hist / (t_ant if t_ant > 0 else t_act_float), 2)
-        pv_bs = round(pv_usd * t_act_float, 2) if pv_usd > 0 else pv_bs_hist
+        # Filtro de seguridad: detecta si algún producto histórico guardó el monto
+        # de Bs en la casilla USD por tasa 1.0 y lo corrige en tiempo real.
+        def _resolver_par(val_usd, val_bs):
+            u = float(val_usd or 0)
+            b = float(val_bs or 0)
+            if u > 100.0 and b > 0 and abs(u - b) < 0.1:
+                u = round(b / t_safe, 2)
+            elif u <= 0 and b > 0:
+                u = round(b / t_safe, 2)
+            b_dinamico = round(u * t_act_float, 2) if u > 0 else b
+            return u, b_dinamico
 
-        cu_usd = float(p.ult_costo_usd or 0)
-        cu_bs_hist = float(p.ult_costo or 0)
-        if cu_usd <= 0 and cu_bs_hist > 0:
-            cu_usd = round(cu_bs_hist / (t_ant if t_ant > 0 else t_act_float), 2)
-        cu_bs = round(cu_usd * t_act_float, 2) if cu_usd > 0 else cu_bs_hist
-
-        pm_usd = float(p.ult_precio_mayor_usd or 0)
-        pm_bs_hist = float(p.ult_precio_mayor or 0)
-        if pm_usd <= 0 and pm_bs_hist > 0:
-            pm_usd = round(pm_bs_hist / (t_ant if t_ant > 0 else t_act_float), 2)
-        pm_bs = round(pm_usd * t_act_float, 2) if pm_usd > 0 else pm_bs_hist
-
-        ppm_usd = float(p.ult_precio_promo_mayor_usd or 0)
-        ppm_bs_hist = float(p.ult_precio_promo_mayor or 0)
-        if ppm_usd <= 0 and ppm_bs_hist > 0:
-            ppm_usd = round(ppm_bs_hist / (t_ant if t_ant > 0 else t_act_float), 2)
-        ppm_bs = round(ppm_usd * t_act_float, 2) if ppm_usd > 0 else ppm_bs_hist
-
-        pgm_usd = float(p.ult_precio_gran_mayor_usd or 0)
-        pgm_bs_hist = float(p.ult_precio_gran_mayor or 0)
-        if pgm_usd <= 0 and pgm_bs_hist > 0:
-            pgm_usd = round(pgm_bs_hist / (t_ant if t_ant > 0 else t_act_float), 2)
-        pgm_bs = round(pgm_usd * t_act_float, 2) if pgm_usd > 0 else pgm_bs_hist
-
-        ppgm_usd = float(p.ult_precio_promo_gran_mayor_usd or 0)
-        ppgm_bs_hist = float(p.ult_precio_promo_gran_mayor or 0)
-        if ppgm_usd <= 0 and ppgm_bs_hist > 0:
-            ppgm_usd = round(ppgm_bs_hist / (t_ant if t_ant > 0 else t_act_float), 2)
-        ppgm_bs = round(ppgm_usd * t_act_float, 2) if ppgm_usd > 0 else ppgm_bs_hist
-
-        pp_usd = float(p.ult_precio_promo_usd or 0)
-        pp_bs_hist = float(p.ult_precio_promo or 0)
-        if pp_usd <= 0 and pp_bs_hist > 0:
-            pp_usd = round(pp_bs_hist / (t_ant if t_ant > 0 else t_act_float), 2)
-        pp_bs = round(pp_usd * t_act_float, 2) if pp_usd > 0 else pp_bs_hist
+        pv_usd, pv_bs = _resolver_par(p.ult_precio_usd, p.ult_precio)
+        cu_usd, cu_bs = _resolver_par(p.ult_costo_usd, p.ult_costo)
+        pm_usd, pm_bs = _resolver_par(p.ult_precio_mayor_usd, p.ult_precio_mayor)
+        ppm_usd, ppm_bs = _resolver_par(p.ult_precio_promo_mayor_usd, p.ult_precio_promo_mayor)
+        pgm_usd, pgm_bs = _resolver_par(p.ult_precio_gran_mayor_usd, p.ult_precio_gran_mayor)
+        ppgm_usd, ppgm_bs = _resolver_par(p.ult_precio_promo_gran_mayor_usd, p.ult_precio_promo_gran_mayor)
+        pp_usd, pp_bs = _resolver_par(p.ult_precio_promo_usd, p.ult_precio_promo)
 
         data.append({
             'id': p.id,
