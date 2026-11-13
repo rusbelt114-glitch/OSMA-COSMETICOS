@@ -116,7 +116,12 @@ def api_gastos(request):
                 monto_bs = (monto_orig * tasa).quantize(Decimal('0.01'))
             else:
                 moneda = 'BS'
-                tasa = Decimal('1.0000')
+                tasa_def = HistorialTasa.obtener_ultima_tasa('USD_BCV') or Decimal('900.00')
+                try:
+                    tasa_in = Decimal(str(payload.get('tasa', tasa_def)))
+                    tasa = tasa_in if tasa_in > Decimal('10.00') else tasa_def
+                except Exception:
+                    tasa = tasa_def
                 monto_bs = monto_orig
 
             gasto = Gasto.objects.create(

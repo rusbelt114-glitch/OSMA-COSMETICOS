@@ -101,7 +101,7 @@ def obtener_resumen_periodo(desde_dt=None, hasta_dt=None):
             total_costos_usd += v.costo_total_usd
             total_ganancia_usd += v.ganancia_bruta_usd
         else:
-            t_v = v.tasa_usd_bcv if v.tasa_usd_bcv > Decimal('0.00') else tasa_bcv
+            t_v = v.tasa_usd_bcv if (v.tasa_usd_bcv and v.tasa_usd_bcv > Decimal('10.00')) else tasa_bcv
             ing_u = (v.total_bs / t_v).quantize(Decimal('0.01'))
             cos_u = (v.costo_total_bs / t_v).quantize(Decimal('0.01'))
             total_ingresos_usd += ing_u
@@ -115,8 +115,8 @@ def obtener_resumen_periodo(desde_dt=None, hasta_dt=None):
         if g.moneda in ('USD', 'USDT'):
             m_usd = g.monto_original
         else:
-            t_g = g.tasa_aplicada if g.tasa_aplicada > Decimal('0.00') else tasa_bcv
-            m_usd = (g.monto_original / t_g).quantize(Decimal('0.01'))
+            t_g = g.tasa_aplicada if (g.tasa_aplicada and g.tasa_aplicada > Decimal('10.00')) else tasa_bcv
+            m_usd = (g.monto_equivalente_bs / t_g).quantize(Decimal('0.01'))
         if g.categoria == 'TIENDA':
             total_gastos_tienda_usd += m_usd
         else:
@@ -170,7 +170,7 @@ def obtener_resumen_periodo(desde_dt=None, hasta_dt=None):
         'total_gastos_personal': total_gastos_personal,
         'total_gastos_personal_usd': total_gastos_personal_usd,
         'total_gastos_general': total_gastos_general,
-        'total_gastos_general_usd': a_usd(total_gastos_general),
+        'total_gastos_general_usd': total_gastos_tienda_usd + total_gastos_personal_usd,
         'resultado_despues_gastos': resultado_despues_gastos,
         'resultado_despues_gastos_usd': resultado_despues_gastos_usd,
         'saldo_caja_real': saldo_caja_real,
